@@ -1,72 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Web Application</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 0;
-            color: #333;
-        }
-        header, main, footer {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 1rem;
-        }
-        header {
-            background-color: #f4f4f4;
-            text-align: center;
-            padding: 2rem;
-            margin-bottom: 2rem;
-        }
-        footer {
-            text-align: center;
-            margin-top: 2rem;
-            padding: 2rem;
-            background-color: #f4f4f4;
-        }
-        ul {
-            list-style-type: none;
-            padding: 0;
-        }
-        li {
-            margin-bottom: 1rem;
-        }
-        a {
-            display: inline-block;
-            background-color: #4CAF50;
-            color: white;
-            padding: 0.5rem 1rem;
-            text-decoration: none;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-        a:hover {
-            background-color: #45a049;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RISCC Shiny Applications</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-    <header>
-        <h1>Welcome to My Web Application</h1>
-    </header>
-    
-    <main>
-        <section>
-            <h2>Available RShiny Applications</h2>
-            <ul>
-                <li><a href="/shiny/app1/">App 1: Data Analysis Tool</a></li>
-                <li><a href="/shiny/app2/">App 2: Data Summary Viewer</a></li>
-            </ul>
-        </section>
-    </main>
-    
-    <footer>
-        <p> RISCC</p>
-    </footer>
+
+  <header>
+    <div class="container">
+      <div class="header-content">
+        <div class="logo">
+          <img src="Cross-RISCC Logo 2023.png" alt="RISCC Logo" />
+          <h1>RISCC Tools</h1>
+        </div>
+        <nav>
+          <ul>
+            <li><a href="/">Home</a></li>
+            <li><a href="/shiny/app1/">App 1: Data Analysis Tool</a></li>
+            <li><a href="/shiny/app2/">App 2: Data Summary Viewer</a></li>
+          </ul>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div class="container">
+        <h2>Welcome to the RISCC Shiny Application Portal</h2>
+        <p>
+          This page hosts interactive tools developed to support decision-making and data exploration.
+          Use the links above to access individual applications.
+        </p>
+      </div>
+    </section>
+
+    <section class="app-preview">
+      <div class="container">
+        <div class="app-grid">
+          <div class="app-block">
+            <h3><a href="/shiny/app1/">App 1: Data Analysis Tool</a></h3>
+            <p>
+              This tool allows users to explore datasets relevant to RISCC's ongoing projects.
+              You can filter, visualize, and export results as needed.
+            </p>
+          </div>
+
+          <div class="app-block">
+            <h3><a href="/shiny/app2/">App 2: Data Summary Viewer</a></h3>
+            <p>
+              This tool provides a high-level overview of summary statistics from ecological datasets.
+              Ideal for generating reports or understanding general trends.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="container">
+      <p>2025 RISCC Network.</p>
+    </div>
+  </footer>
 </body>
-</html>
