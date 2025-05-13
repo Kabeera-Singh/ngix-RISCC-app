@@ -1,4 +1,3 @@
-
 library(tidyverse)
 library(shiny)
 library(shinyWidgets)
@@ -137,6 +136,11 @@ tree_list <- create_tree(tree)
 
 tree_id <- rrapply::rrapply(tree_list, how = "bind")
 
+# Get all plant types from the tree list for pre-selection
+plant_type_ids <- tree_id[tree_id$col == "2" & tree_id$V1 == "Plant.Type", -c(1,2)]
+plant_type_ids <- plant_type_ids[!is.na(plant_type_ids)]
+plant_type_ids <- unname(as.character(plant_type_ids))
+
 #######################################
 
 ## specify user interface
@@ -148,13 +152,13 @@ ui<-fluidPage(theme = "bootstrap.min.css", #this is introducing bootswatch's Jou
               wellPanel(tags$i("Disclaimers and more information")), #Well panel creates a grey box for the text of our app description. tags$i() is used to create italicized text
               sidebarLayout( #sidebarLayout is create a side panel for all of our input options
                 #select box for state you want the list for
-                sidebarPanel(selectInput(inputId="state", label="Choose your state", choices=c("Select", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland", "Massachussetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania", "Rhode Island", "Vermont", "Virginia", "West Virginia")),
+                sidebarPanel(selectInput(inputId="state", label="Choose your state", choices=c("Select", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland", "Massachussetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania", "Rhode Island", "Vermont", "Virginia", "West Virginia"), selected="Massachussetts"),
                              #numeric input for your hardiness zone
                              numericInput(inputId="zones", label="Choose your current hardiness zone",
                                           value=3, min=3, max=8, step=1),
 
                               # columns and filters
-                             treeInput("tree", "What would you like to see?", tree_list, selected = "Vine", returnValue = "id", closeDepth = 0)),
+                             treeInput("tree", "What would you like to see?", tree_list, selected = plant_type_ids, returnValue = "id", closeDepth = 0)),
 
                 #Allocating output space
                 #this section of code creates a tab for the output list
@@ -222,5 +226,4 @@ server<-function(input,output){
 ## execute the app, opens a new window
 # shinyApp(ui=ui, server=server)
 
-app <- shinyApp(ui = ui, server = server)
-runApp(app, host ="0.0.0.0", port = 3838, launch.browser = FALSE)
+shinyApp(ui = ui, server = server)
