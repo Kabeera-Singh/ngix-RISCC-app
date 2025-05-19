@@ -7,6 +7,8 @@ library(readxl)
 library(shinyjs)
 library(rrapply)
 library(data.table)
+library(bslib)
+library(shinydashboard)
 
 print("Printing Current Working Directory")
 print(getwd())
@@ -14,13 +16,13 @@ print("Printing files in current working directory")
 print(list.files())
 
 #hardiness zone file from earlier riscc project
-state.hz <- read.csv("/srv/shiny-server/app1/data/state.hz.csv")
+state.hz <- read.csv("data/state.hz.csv")
 #zipcode file from USDA
-zipcodes <- read.csv("/srv/shiny-server/app1/data/zipcodes.csv")
+zipcodes <- read.csv("data/zipcodes.csv")
 #subset of data - will change as we finish consolidating + cleaning
-data <- read_excel("/srv/shiny-server/app1/data/subsetdec6.xlsx")
+data <- read_excel("data/subsetdec6.xlsx")
 #reference sheet with display column names
-reference <- read.csv("/srv/shiny-server/app1/data/reference.csv")
+reference <- read.csv("data/reference.csv")
 #cut down to columns of interest for display
 reference <- reference[!is.na(reference$display),]
 
@@ -49,13 +51,12 @@ reference.set$answers <- str_replace_all(reference.set$answers, fixed(" ,"), ","
 reference.set$answers <- str_replace_all(reference.set$answers, fixed(" , "), ",")
 reference.set$answers <- str_replace_all(reference.set$answers, fixed(",,"), ",")
 reference.set$answers = sapply(strsplit(reference.set$answers, "/"), function(x) answers = paste(unique(x), collapse = ","))
-reference.set$answers = sapply(strsplit(reference.set$answers, "; "), function(x) answers = paste(unique(x), collapse = ","))
+reference.set$answers = sapply(strsplit(reference.set$answers, ";"), function(x) answers = paste(unique(x), collapse = ","))
 reference.set$answers <- str_replace_all(reference.set$answers, fixed(",,"), ",")
 reference.set$answers <- str_replace_all(reference.set$answers, fixed(",m,"), ",")
 reference.set$answers = sapply(strsplit(reference.set$answers, ","), function(x) answers = paste(unique(x), collapse = ","))
 
 #create logical column detecting strings beginning with commas
-
 comma.fun <- function(i) {
 b <- (gregexpr(",", reference.set$answers[i])[[1]][1]) == 1
 }
@@ -86,13 +87,12 @@ test <- test[!duplicated(test$AcceptedName), ]
 names(test)[names(test) == 'Zone.From.Combo.x'] <- 'MinZone'
 names(test)[names(test) == 'Zone.To.Combo.x'] <- 'MaxZone'
 
-
 #Connect state abbreviations to full state names
 state.hz$Full.Name <- NA
 state.hz$Full.Name[state.hz$State == "NY"] <- "New York"
 state.hz$Full.Name[state.hz$State == "CT"] <- "Connecticut"
 state.hz$Full.Name[state.hz$State == "RI"] <- "Rhode Island"
-state.hz$Full.Name[state.hz$State == "MA"] <- "Massachussetts"
+state.hz$Full.Name[state.hz$State == "MA"] <- "Massachusetts"
 state.hz$Full.Name[state.hz$State == "NH"] <- "New Hampshire"
 state.hz$Full.Name[state.hz$State == "VT"] <- "Vermont"
 state.hz$Full.Name[state.hz$State == "ME"] <- "Maine"
@@ -105,7 +105,6 @@ state.hz$Full.Name[state.hz$State == "DE"] <- "Delaware"
 state.hz$Full.Name[state.hz$State == "PA"] <- "Pennsylvania"
 state.hz$Full.Name[state.hz$State == "NC"] <- "North Carolina"
 state.hz$Full.Name[state.hz$State == "KY"] <- "Kentucky"
-
 
 #Make sure all data has hardiness zone information
 test <-test[!is.na(test$MinZone) & !is.na(test$MaxZone), ]
@@ -121,11 +120,8 @@ names(choices) <- c("Plant.Type", "Duration", "Lifespan", "Commercial.Availabili
                     "Pollinator.Value", "Pollinators")
 reference.set$col <- names(choices)
 
-
 #make tree https://rdrr.io/cran/shinyWidgets/man/treeInput.html - make this long, then skip viewing columns
 #and bundle into filter options
-
-
 tree <- reference.set %>% select(1, 4) %>%
  separate(2, c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r"), sep = ",") %>% t() %>% as.data.frame() %>% slice( -(1))
 names(tree) <- reference.set$col
@@ -133,97 +129,310 @@ tree <- tree %>% gather(key = "category", value = "answer", na.rm = TRUE)
 tree_list <- create_tree(tree)
 
 ## find id in tree list
-
 tree_id <- rrapply::rrapply(tree_list, how = "bind")
 
-# Get all plant types from the tree list for pre-selection
+# Get all plant types from the tree list, defaulting to 'herb'
 plant_type_ids <- tree_id[tree_id$col == "2" & tree_id$V1 == "Plant.Type", -c(1,2)]
-plant_type_ids <- plant_type_ids[!is.na(plant_type_ids)]
-plant_type_ids <- unname(as.character(plant_type_ids))
+herb_id <- plant_type_ids[grepl("herb", tree_id[tree_id$col == "2" & tree_id$V1 == "Plant.Type", -c(1,2)], ignore.case = TRUE)]
+herb_id <- as.character(herb_id[!is.na(herb_id)])
+
+# Get available states from data
+available_states <- unique(state.hz$Full.Name)
+available_states <- sort(available_states[!is.na(available_states)])
 
 #######################################
 
 ## specify user interface
-ui<-fluidPage(theme = "bootstrap.min.css", #this is introducing bootswatch's Journal CSS (located in www folder of app files). Fluid page is so that the contents of the app adjust to the browser size, basicPage would mean the components are static
-
-              titlePanel("Climate Resilient Plants"), #setting up the title
-              tags$hr(), #adds a line between title Panel and the body of the app
-              wellPanel(tags$i("Some text. Instructions for users. Select the state you live in and your current hardiness zone.")),
-              wellPanel(tags$i("Disclaimers and more information")), #Well panel creates a grey box for the text of our app description. tags$i() is used to create italicized text
-              sidebarLayout( #sidebarLayout is create a side panel for all of our input options
-                #select box for state you want the list for
-                sidebarPanel(selectInput(inputId="state", label="Choose your state", choices=c("Select", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland", "Massachussetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania", "Rhode Island", "Vermont", "Virginia", "West Virginia"), selected="Massachussetts"),
-                             #numeric input for your hardiness zone
-                             numericInput(inputId="zones", label="Choose your current hardiness zone",
-                                          value=3, min=3, max=8, step=1),
-
-                              # columns and filters
-                             treeInput("tree", "What would you like to see?", tree_list, selected = plant_type_ids, returnValue = "id", closeDepth = 0)),
-
-                #Allocating output space
-                #this section of code creates a tab for the output list
-                mainPanel(tabsetPanel(
-                  tabPanel("Species List", tags$br(),DT::dataTableOutput("list"))#add vertical space between top of tab panel and the data table with tags$br
-                )))
+ui <- fluidPage(
+  # Modern theme using bslib
+  theme = bs_theme(
+    version = 4,
+    bootswatch = "flatly",
+    primary = "#2C5530",
+    success = "#5A744F",
+    info = "#8FA68E",
+    base_font = font_google("Inter"),
+    heading_font = font_google("Poppins")
+  ),
+  
+  # Include shinyjs
+  useShinyjs(),
+  
+  # Modern header
+  div(
+    class = "bg-primary text-white py-4 mb-4",
+    div(
+      class = "container-fluid d-flex justify-content-between align-items-center",
+      div(
+        h1("🌱 Climate Resilient Plants", class = "mb-0 h3"),
+        p("Find native plants suitable for your climate future", class = "mb-0 small opacity-75")
+      ),
+      actionButton(
+        "homeBtn",
+        label = "Back to Home",
+        onclick = "window.open('https://ngix-webpage-latest.onrender.com', '_self')",
+        class = "btn btn-outline-light",
+        icon = icon("home")
+      )
+    )
+  ),
+  
+  # Info card
+  fluidRow(
+    class = "mb-4",
+    column(
+      width = 12,
+      div(
+        class = "card border-0 shadow-sm",
+        div(
+          class = "card-body",
+          h5("How to Use This Tool", class = "card-title text-success"),
+          p("Select your state and current hardiness zone below. The tool will show climate-resilient plants that will thrive in your area's future climate conditions.", class = "card-text mb-0")
+        )
+      )
+    )
+  ),
+  
+  # Error display
+  div(id = "error-display", style = "display: none;"),
+  
+  # Main layout
+  fluidRow(
+    # Sidebar panel with modern styling
+    column(
+      width = 4,
+      div(
+        class = "card border-0 shadow-sm sticky-top",
+        style = "top: 20px;",
+        div(
+          class = "card-header bg-success text-white",
+          h5("Filter Options", class = "mb-0")
+        ),
+        div(
+          class = "card-body p-3",
+          
+          # State selection
+          div(
+            class = "mb-3",
+            selectInput(
+              inputId = "state", 
+              label = tags$span(icon("map-marker-alt"), " Choose your state"),
+              choices = c("Select" = "", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland", 
+                        "Massachusetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania", 
+                        "Rhode Island", "Vermont", "Virginia", "West Virginia"),
+              selected = "Massachusetts",
+              width = "100%"
+            )
+          ),
+          
+          # Hardiness zone input
+          div(
+            class = "mb-3",
+            numericInput(
+              inputId = "zones", 
+              label = tags$span(icon("thermometer-half"), " Current hardiness zone"),
+              value = 3, 
+              min = 3, 
+              max = 8, 
+              step = 1,
+              width = "100%"
+            )
+          ),
+          
+          # Plant characteristics
+          div(
+            class = "mt-4",
+            h6("Plant Characteristics", class = "text-success"),
+            treeInput(
+              "tree", 
+              "Select desired characteristics:",
+              tree_list, 
+              selected = 'herb',
+              returnValue = "id", 
+              closeDepth = 1
+            )
+          )
+        )
+      )
+    ),
+    
+    # Main panel
+    column(
+      width = 8,
+      div(
+        class = "card border-0 shadow-sm",
+        div(
+          class = "card-header bg-info text-white d-flex justify-content-between align-items-center",
+          h5("Species List", class = "mb-0"),
+          div(
+            class = "badge badge-light",
+            textOutput("results_count", inline = TRUE)
+          )
+        ),
+        div(
+          class = "card-body p-0",
+          # Simple loading indicator
+          conditionalPanel(
+            condition = "$('html').hasClass('shiny-busy')",
+            div(
+              class = "text-center p-5",
+              HTML('<div class="spinner-border text-success" role="status">
+                     <span class="sr-only">Loading...</span>
+                   </div>
+                   <p class="mt-3 text-muted">Loading plant data...</p>')
+            )
+          ),
+          # Data table
+          DT::dataTableOutput("list")
+        )
+      )
+    )
+  ),
+  
+  # Footer
+  tags$footer(
+    class = "bg-light text-muted text-center py-3 mt-5",
+    p("Climate Resilient Plants Database - Helping you choose plants for future climate conditions", class = "mb-0 small")
+  ),
+  
+  # Custom CSS for improved styling
+  tags$head(
+    tags$style(HTML("
+      .content-wrapper { 
+        padding-top: 20px; 
+      }
+      .dt-buttons { 
+        margin-bottom: 10px; 
+      }
+      .dataTables_wrapper .dataTables_length,
+      .dataTables_wrapper .dataTables_filter {
+        margin-bottom: 10px;
+      }
+      .card {
+        border-radius: 12px;
+      }
+      .btn {
+        border-radius: 8px;
+      }
+      .form-control {
+        border-radius: 6px;
+      }
+      #tree {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .sticky-top {
+        z-index: 1020;
+      }
+      .shiny-busy .recalculating {
+        opacity: 0.5;
+      }
+    "))
+  )
 )
 
 ## defining data inputs and outputs
-server<-function(input,output){
-  #using a reactive function to be able to access user inputs in order to set up the output list that will be used in renderdatatable
-  listfortable <-reactive({
-    # print(input$tree)
-    state.hz #uploading a table that contains each state and their future hardiness zone
-    abbrev<-state.hz$State[state.hz$Full.Name==input$state & state.hz$Time_Period == "FutureWorst"] #pulling the abbreviation for the state that was inputted by the user
-    table.output <- test[test$MaxZone >= state.hz$Zone.Min[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"] & test$MinZone <= state.hz$Zone.Max[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"],]
-    #this all sets up a lot of reference objects based on the tree input that will be used in the reactive filtering
-    b <- input$tree #for easier typing
-    j <- data.frame() #create empty df to put index coordinates
+server <- function(input, output, session) {
+  # Reactive function for the filtered species list
+  listfortable <- reactive({
+    req(input$state, input$zones)
+    
+    # Get state abbreviation and zone information
+    abbrev <- state.hz$State[state.hz$Full.Name == input$state & state.hz$Time_Period == "FutureWorst"]
+    table.output <- test[test$MaxZone >= state.hz$Zone.Min[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"] & 
+                         test$MinZone <= state.hz$Zone.Max[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"],]
+    
+    # Process tree input
+    b <- input$tree
+    j <- data.frame()
     for(i in 1:length(b)){
-      j <- rbind(j, (which(tree_id == b[i], arr.ind = TRUE))) #find index coordinates of each tree id
+      j <- rbind(j, (which(tree_id == b[i], arr.ind = TRUE)))
     }
-    pos <- as.data.frame(j) #make dataframe of index coordinates of tree ids
-    pos <- subset(pos, subset = col != "2") #removing inputs for parent categories, leaving only children (answers)
-    rownames(pos) <- NULL #remove rownames, they were confusing
-    ans <- c() #answer input
-    cat<- c() #categories of each answer input
+    pos <- as.data.frame(j)
+    pos <- subset(pos, subset = col != "2")
+    rownames(pos) <- NULL
+    
+    ans <- c()
+    cat <- c()
     for (i in 1:length(pos$col)){
       r <- pos[i, 1]
       c <- (pos[i, 2] - 1)
       ans[i] <- tree_id[r, c]
       cat[i] <- tree_id[r, 1]
     }
-    cols <- which(names(choices) %in% cat) #this indicates which columns to include without duplicates
-    key <- as.data.frame(cbind(ans, cat, match(cat, names(choices)))) #connects input answers with names and column numbers
-    #creating cleaned up filtered vectors to make final input out of
-    Scientific.Name <-table.output$AcceptedName[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones]
-    Common.Name <-table.output$CommonName.E[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones]
-    Criteria <- table.output$Criteria[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones]
-    More <- table.output[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones, cols + 4]
-    outputList <- as.data.frame(cbind(Scientific.Name, Common.Name, Criteria, More)) #add them all together
+    
+    cols <- which(names(choices) %in% cat)
+    key <- as.data.frame(cbind(ans, cat, match(cat, names(choices))))
+    
+    # Filter by hardiness zone
+    filtered_data <- table.output[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones, ] # nolint
+    
+    # Create output list
+    Scientific.Name <- filtered_data$AcceptedName
+    Common.Name <- filtered_data$CommonName.E
+    Criteria <- filtered_data$Criteria
+    More <- filtered_data[, cols + 4]
+    
+    outputList <- as.data.frame(cbind(Scientific.Name, Common.Name, Criteria, More))
     outputList$Scientific.Name <- as.character(outputList$Scientific.Name)
-    colnames(outputList)<-c("Scientific.Name", "Common.Name", "Criteria", names(choices)[cols]) #Make names for columns
-    ##the following code sorts the dataset based on filtering criteria selection
-    #text searches the database for input strings and sorts by highest # of matches (adding a criteria column)
-    #will need to add to it for numerical range columns
-    crit <- as.data.frame(outputList$Criteria) #make a dataframe length of dataset
+    colnames(outputList) <- c("Scientific Name", "Common Name", "Match Score", names(choices)[cols])
+    
+    # Calculate criteria matching
+    crit <- as.data.frame(outputList$`Match Score`)
     for(g in 1:length(cols)){
       pattern <- paste((key$ans[key$V3 == cols[g]]), collapse = '|')
       key_called <- unique(key$cat[key$V3 == cols[g]])
       outputList.crit <- outputList %>%
-        mutate(yes = case_when(if_any(contains(key_called), ~ grepl(pattern, .x)) ~ + 1)) #search each answer in the correct column
-      crit[, g] <- outputList.crit$yes #multiple columns, one for each criteria
+        mutate(yes = case_when(if_any(contains(key_called), ~ grepl(pattern, .x)) ~ + 1))
+      crit[, g] <- outputList.crit$yes
     }
-    # print(crit)
-    outputList$Criteria <- rowSums(crit, na.rm = TRUE) #add column together to get total criteria number
-    outputList <- arrange(outputList, desc(Criteria))
+    
+    outputList$`Match Score` <- rowSums(crit, na.rm = TRUE)
+    outputList <- arrange(outputList, desc(`Match Score`))
     outputList
   })
-  #problem: this tells you if its currently hardy to your zone and will be hardy anywhere in your state
-  #not necessarily in your zone. #Massachusetts zone 6 just won't display any plants.
-  output$list<- DT::renderDataTable(datatable(listfortable())) #using the DT package to produce a data table that is searchable, has options for sorting output, and other functions that makes data output more appealing, the buttons extension allows us to export the data table as a csv or pdf, i think there is an internal problem though because it seems as though DT is not as updated enough?
-  }
+  
+  # Results count
+  output$results_count <- renderText({
+    data <- listfortable()
+    paste(nrow(data), "plants found")
+  })
+  
+  # Data table output
+  output$list <- DT::renderDataTable({
+    data <- listfortable()
+    
+    if(is.null(data) || nrow(data) == 0) {
+      empty_df <- data.frame("Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state.")
+      return(datatable(empty_df, options = list(dom = 't', searching = FALSE), 
+                      rownames = FALSE, colnames = ""))
+    }
+    
+    datatable(
+      data,
+      extensions = c('Buttons', 'Responsive'),
+      options = list(
+        dom = 'Bfrtip',
+        buttons = list(
+          list(extend = 'csv', text = 'Download CSV'),
+          list(extend = 'excel', text = 'Download Excel'),
+          list(extend = 'pdf', text = 'Download PDF')
+        ),
+        responsive = TRUE,
+        pageLength = 15,
+        scrollX = TRUE
+      ),
+      rownames = FALSE,
+      class = 'table-hover'
+    ) %>%
+      formatStyle(
+        'Match Score',
+        backgroundColor = styleInterval(c(1, 3, 5), 
+                                      c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7')),
+        fontWeight = 'bold'
+      )
+  })
+}
 
-## execute the app, opens a new window
-# shinyApp(ui=ui, server=server)
-
+## execute the app
 shinyApp(ui = ui, server = server)

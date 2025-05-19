@@ -1,69 +1,82 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>RISCC Shiny Applications</title>
-  <link rel="stylesheet" href="css/style.css" />
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>RISCC Shiny Applications</title>
+        <link rel="stylesheet" href="css/style.css" />
+    </head>
+    <body>
+        <header>
+            <div class="container">
+                <div class="header-content">
+                    <div class="logo">
+                        <img src="Cross-RISCC Logo 2023.png" alt="RISCC Logo" />
+                        <h1>RISCC Tools</h1>
+                    </div>
+                    <nav>
+                        <ul>
+                            <li><a href="/">Home</a></li>
+                            <li>
+                                <a href="./app1/">Climate Resilient Plants</a>
+                            </li>
+                            <li>
+                                <a href="./app2/">App 2: Data Summary Viewer</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </header>
+        <main>
+            <section class="intro">
+                <div class="container">
+                    <h2>Welcome to the RISCC Shiny Application Portal</h2>
+                    <p>
+                        This page hosts interactive tools developed to support
+                        decision-making and data exploration. Use the links to
+                        access individual applications.
+                    </p>
+                </div>
+            </section>
 
-  <header>
-    <div class="container">
-      <div class="header-content">
-        <div class="logo">
-          <img src="Cross-RISCC Logo 2023.png" alt="RISCC Logo" />
-          <h1>RISCC Tools</h1>
-        </div>
-        <nav>
-          <ul>
-            <li><a href="/">Home</a></li>
-            <li><a href="/shiny/app1/">Climate Resilient Plants</a></li>
-            <li><a href="/shiny/app2/">App 2: Data Summary Viewer</a></li>
-          </ul>
-        </nav>
-      </div>
-    </div>
-  </header>
-  <main>
-    <section class="intro">
-      <div class="container">
-        <h2>Welcome to the RISCC Shiny Application Portal</h2>
-        <p>
-          This page hosts interactive tools developed to support decision-making and data exploration.
-          Use the links to access individual applications.
-        </p>
-      </div>
-    </section>
+            <section class="app-preview">
+                <div class="container">
+                    <div class="app-grid">
+                        <div class="app-block">
+                            <h3>
+                                <a href="/app1/">Climate Resilient Plants</a>
+                            </h3>
+                            <p>
+                                Discover climate-resilient plants suitable for
+                                your state and hardiness zone. Filter by plant
+                                characteristics, growth requirements, and
+                                climate tolerance to find species that will
+                                thrive in your local conditions and future
+                                climate scenarios.
+                            </p>
+                        </div>
 
-    <section class="app-preview">
-      <div class="container">
-        <div class="app-grid">
-          <div class="app-block">
-            <h3><a href="/shiny/app1/">Climate Resilient Plants</a></h3>
-            <p>
-              Discover climate-resilient plants suitable for your state and hardiness zone. Filter by plant characteristics, 
-              growth requirements, and climate tolerance to find species that will thrive in your local conditions and future climate scenarios.
-            </p>
-          </div>
+                        <div class="app-block">
+                            <h3>
+                                <a href="/app2/">App 2: Data Summary Viewer</a>
+                            </h3>
+                            <p>
+                                This tool provides a high-level overview of
+                                summary statistics from ecological datasets.
+                                Ideal for generating reports or understanding
+                                general trends.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
 
-          <div class="app-block">
-            <h3><a href="/shiny/app2/">App 2: Data Summary Viewer</a></h3>
-            <p>
-              This tool provides a high-level overview of summary statistics from ecological datasets.
-              Ideal for generating reports or understanding general trends.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="container">
-      <p>2025 RISCC Network.</p>
-    </div>
-  </footer>
-
-</body>
+        <footer>
+            <div class="container">
+                <p>2025 RISCC Network.</p>
+            </div>
+        </footer>
+    </body>
 </html>
