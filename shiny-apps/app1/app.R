@@ -19,73 +19,87 @@ print(list.files())
 state.hz <- read.csv("data/state.hz.csv")
 #zipcode file from USDA
 zipcodes <- read.csv("data/zipcodes.csv")
-#subset of data - will change as we finish consolidating + cleaning
-data <- read_excel("data/subsetdec6.xlsx")
-#reference sheet with display column names
-reference <- read.csv("data/reference.csv")
-#cut down to columns of interest for display
-reference <- reference[!is.na(reference$display),]
+#main dataset - updated to new format
+data <- read.csv("data/ClimateSmart_Data_Cleaned.csv")
+
+# Create reference sheet mapping from new dataset columns - exclude Propagation.Methods and Rare.Status
+reference <- data.frame(
+  col = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", "Bloom.Period", 
+          "Color", "Interesting.Foliage", "Showy", "Garden.Aggressive", "Bird.Services", 
+          "Mammal.Services", "Insect.Services", "Reptile.Amphibian.Services", "Pollinators"),
+  display = c("Growth Habit", "Sun Level", "Moisture Level", "Soil Type", "Bloom Period", 
+              "Color", "Interesting Foliage", "Showy", "Garden Aggressive", "Bird Services", 
+              "Mammal Services", "Insect Services", "Reptile/Amphibian Services", "Pollinators"),
+  sortable = rep(TRUE, 14)
+)
 
 #filter reference sheet to columns which we want to be filter options
 reference.set <- subset(reference, subset = sortable == TRUE)
 
 #consolidate and format data columns for querying
 test <- data %>%
-  dplyr::select(AcceptedName, CommonName.E, Zone.From.Combo.x, Zone.To.Combo.x, one_of(reference.set$col))
+  dplyr::select(Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High, 
+                one_of(reference.set$col), Propagation.Methods) %>%
+  # Remove rows with missing hardiness zone information
+  filter(!is.na(Hardiness.Zone.Low) & !is.na(Hardiness.Zone.High))
 
 reference.set$answers <- NA
 answers <- list()
 #get answers from dataset
 for (i in 1:length(reference.set$col)) {
-x <- as.vector(unique(test[, i+4]))
-a <- (unlist(x)) %>% paste(collapse=", ")
-answers <- append(answers, a)
+  x <- as.vector(unique(test[, i+4]))
+  # Better handling of mixed data types and NA values
+  x <- x[!is.na(x) & x != "" & x != "NA"]
+  a <- paste(unique(unlist(strsplit(paste(x, collapse=","), "[,;/]"))), collapse=", ")
+  answers <- append(answers, a)
 }
+
 #clean up answers to unique only
 reference.set$answers <- answers
 reference.set$answers <- as.character(reference.set$answers)
-#remove extra spaces and NAs, clean up mix of punctuation (comma, semicolon, and slash
-reference.set$answers <- str_replace_all(reference.set$answers, fixed("NA"), "")
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(", "), ",")
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(" ,"), ",")
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(" , "), ",")
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(",,"), ",")
-reference.set$answers = sapply(strsplit(reference.set$answers, "/"), function(x) answers = paste(unique(x), collapse = ","))
-reference.set$answers = sapply(strsplit(reference.set$answers, ";"), function(x) answers = paste(unique(x), collapse = ","))
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(",,"), ",")
-reference.set$answers <- str_replace_all(reference.set$answers, fixed(",m,"), ",")
-reference.set$answers = sapply(strsplit(reference.set$answers, ","), function(x) answers = paste(unique(x), collapse = ","))
 
-#create logical column detecting strings beginning with commas
-comma.fun <- function(i) {
-b <- (gregexpr(",", reference.set$answers[i])[[1]][1]) == 1
+# Improved cleanup function
+clean_answers <- function(text) {
+  # Remove NA, empty strings, and clean punctuation
+  text <- str_replace_all(text, "\\bNA\\b", "")
+  text <- str_replace_all(text, "\\s*,\\s*", ",")
+  text <- str_replace_all(text, "^,+|,+$", "")  # Remove leading/trailing commas
+  text <- str_replace_all(text, ",+", ",")      # Remove multiple commas
+  
+  # Split, clean, and rejoin to remove duplicates
+  items <- unlist(strsplit(text, ","))
+  items <- trimws(items)
+  items <- items[items != "" & !is.na(items)]
+  items <- unique(items)
+  
+  return(paste(items, collapse = ","))
 }
-logical <- sapply(1:28, comma.fun)
-reference.set$temp <- logical
-#remove commas at the beginning of strings
-reference.set$answers[reference.set$temp == TRUE] <- (sub('.', '', reference.set$answers[reference.set$temp == TRUE]))
-#clean up
-reference.set$temp <- NULL
-rm(logical)
 
-#make each option for each column a list element in a large list. This will be referenced in the
-#reactive selection code. Might not be strictly necessary but will be much less typing and
-#make the app better able to be updated to full dataset
+reference.set$answers <- sapply(reference.set$answers, clean_answers)
+
+#make each option for each column a list element in a large list
 reference.list <- reference.set %>%
   dplyr::select(1, 4)
+
 answers.list <- function(i){
-  (strsplit(reference.list$answers[i],","))
+  if(reference.list$answers[i] == "" || is.na(reference.list$answers[i])) {
+    return(list(""))
+  }
+  return(strsplit(reference.list$answers[i], ","))
 }
+
 total.choices <- lapply(1:length(reference.list$answers), answers.list)
 rm(reference.list)
 names(total.choices) <- reference.set$col
 
-#deal with duplicates (ideally this code will be removed eventually as it will be redundant)
-test <- test[!duplicated(test$AcceptedName), ]
+#deal with duplicates
+test <- test[!duplicated(test$Scientific.Name), ]
 
-#rename hardiness zone columns
-names(test)[names(test) == 'Zone.From.Combo.x'] <- 'MinZone'
-names(test)[names(test) == 'Zone.To.Combo.x'] <- 'MaxZone'
+#rename hardiness zone columns to match original code
+names(test)[names(test) == 'Hardiness.Zone.Low'] <- 'MinZone'
+names(test)[names(test) == 'Hardiness.Zone.High'] <- 'MaxZone'
+names(test)[names(test) == 'Scientific.Name'] <- 'AcceptedName'
+names(test)[names(test) == 'Common.Name'] <- 'CommonName.E'
 
 #Connect state abbreviations to full state names
 state.hz$Full.Name <- NA
@@ -106,35 +120,112 @@ state.hz$Full.Name[state.hz$State == "PA"] <- "Pennsylvania"
 state.hz$Full.Name[state.hz$State == "NC"] <- "North Carolina"
 state.hz$Full.Name[state.hz$State == "KY"] <- "Kentucky"
 
-#Make sure all data has hardiness zone information
-test <-test[!is.na(test$MinZone) & !is.na(test$MaxZone), ]
-
 #Add criteria column
 test$Criteria <- rep(0, length.out = length(test$AcceptedName))
 
-#set column choice numbers and names- needs work
+#set column choice numbers and names- updated for new dataset
 choices <- c(1:length(reference.set$col))
-names(choices) <- c("Plant.Type", "Duration", "Lifespan", "Commercial.Availability", "Soil.Moisture", "Water.Use", "Drought.Tolerance",
-                    "Sun.Exposure", "Growth.Rate", "Active.Growth.Season", "Blooms.From", "Blooms.To", "Bloom.Color", "Bloom.Length", "Showy.Flowers", "Plant.Shape", "Fall.Conspicuous",
-                    "Leaf.Retention", "Interesting.Foliage", "Fragrant.Foliage", "Resprout.Ability", "Maintenance", "Hedge.Tolerance", "Fire.Tolerance", "Grazing.Palatability", "Salt.Tolerance",
-                    "Pollinator.Value", "Pollinators")
-reference.set$col <- names(choices)
+names(choices) <- reference.set$col
 
-#make tree https://rdrr.io/cran/shinyWidgets/man/treeInput.html - make this long, then skip viewing columns
-#and bundle into filter options
-tree <- reference.set %>% select(1, 4) %>%
- separate(2, c("a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r"), sep = ",") %>% t() %>% as.data.frame() %>% slice( -(1))
-names(tree) <- reference.set$col
-tree <- tree %>% gather(key = "category", value = "answer", na.rm = TRUE)
-tree_list <- create_tree(tree)
+# Add propagation methods as a separate category for filtering
+propagation_options <- unique(unlist(strsplit(paste(test$Propagation.Methods[!is.na(test$Propagation.Methods)], collapse=","), "[,;/]")))
+propagation_options <- trimws(propagation_options)
+propagation_options <- propagation_options[propagation_options != "" & !is.na(propagation_options) & propagation_options != "NA"]
 
-## find id in tree list
-tree_id <- rrapply::rrapply(tree_list, how = "bind")
+# Add propagation to reference set for tree but not for main filtering
+reference.set.extended <- rbind(reference.set, data.frame(
+  col = "Propagation.Methods",
+  display = "Propagation Methods", 
+  sortable = TRUE,
+  answers = paste(unique(propagation_options), collapse = ",")
+))
 
-# Get all plant types from the tree list, defaulting to 'herb'
-plant_type_ids <- tree_id[tree_id$col == "2" & tree_id$V1 == "Plant.Type", -c(1,2)]
-herb_id <- plant_type_ids[grepl("herb", tree_id[tree_id$col == "2" & tree_id$V1 == "Plant.Type", -c(1,2)], ignore.case = TRUE)]
-herb_id <- as.character(herb_id[!is.na(herb_id)])
+#make tree - improved version
+tree_data <- data.frame()
+for(i in 1:nrow(reference.set.extended)) {
+  col_name <- reference.set.extended$col[i]
+  options <- unlist(strsplit(reference.set.extended$answers[i], ","))
+  options <- trimws(options)
+  options <- options[options != "" & !is.na(options)]
+  
+  if(length(options) > 0) {
+    temp_df <- data.frame(
+      category = rep(col_name, length(options)),
+      answer = options,
+      stringsAsFactors = FALSE
+    )
+    tree_data <- rbind(tree_data, temp_df)
+  }
+}
+
+tree_list <- create_tree(tree_data)
+
+# Create a proper mapping of tree IDs to categories and values
+tree_mapping <- data.frame()
+extract_tree_info <- function(node, path = "", category = "", parent_id = "") {
+  if(is.list(node)) {
+    if(!is.null(names(node))) {
+      for(name in names(node)) {
+        if(name == "text") {
+          # This is a leaf node with text
+          current_text <- as.character(node$text)
+          current_id <- as.character(node$id)
+          
+          # Determine if this is a category or value
+          if(path == "") {
+            # Top level - this is a category
+            new_category <- current_text
+            extract_tree_info(node, current_text, new_category, current_id)
+          } else {
+            # This is a value under a category
+            tree_mapping <<- rbind(tree_mapping, data.frame(
+              id = current_id,
+              category = category,
+              value = current_text,
+              stringsAsFactors = FALSE
+            ))
+          }
+        } else if(name == "children" && is.list(node$children)) {
+          # Process children
+          for(child in node$children) {
+            extract_tree_info(child, path, category, parent_id)
+          }
+        } else {
+          # Process other named elements
+          extract_tree_info(node[[name]], 
+                           ifelse(path == "", name, paste(path, name, sep = "/")), 
+                           category, parent_id)
+        }
+      }
+    } else {
+      # Unnamed list - process each element
+      for(item in node) {
+        extract_tree_info(item, path, category, parent_id)
+      }
+    }
+  }
+}
+
+# Extract the tree structure
+extract_tree_info(tree_list)
+
+# Get default "Herb" selection
+herb_ids <- c()
+if(nrow(tree_mapping) > 0) {
+  herb_rows <- tree_mapping[tree_mapping$category == "Growth.Habit" & 
+                           grepl("Herb", tree_mapping$value, ignore.case = TRUE), ]
+  if(nrow(herb_rows) > 0) {
+    herb_ids <- as.character(herb_rows$id[1])
+  }
+}
+
+# If no herb found, get first Growth.Habit option
+if(length(herb_ids) == 0) {
+  growth_habit_rows <- tree_mapping[tree_mapping$category == "Growth.Habit", ]
+  if(nrow(growth_habit_rows) > 0) {
+    herb_ids <- as.character(growth_habit_rows$id[1])
+  }
+}
 
 # Get available states from data
 available_states <- unique(state.hz$Full.Name)
@@ -247,7 +338,7 @@ ui <- fluidPage(
               "tree", 
               "Select desired characteristics:",
               tree_list, 
-              selected = 'herb',
+              selected = herb_ids,
               returnValue = "id", 
               closeDepth = 1
             )
@@ -339,62 +430,144 @@ server <- function(input, output, session) {
     
     # Get state abbreviation and zone information
     abbrev <- state.hz$State[state.hz$Full.Name == input$state & state.hz$Time_Period == "FutureWorst"]
+    if(length(abbrev) == 0) return(data.frame())
+    
     table.output <- test[test$MaxZone >= state.hz$Zone.Min[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"] & 
                          test$MinZone <= state.hz$Zone.Max[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"],]
     
-    # Process tree input
-    b <- input$tree
-    j <- data.frame()
-    for(i in 1:length(b)){
-      j <- rbind(j, (which(tree_id == b[i], arr.ind = TRUE)))
-    }
-    pos <- as.data.frame(j)
-    pos <- subset(pos, subset = col != "2")
-    rownames(pos) <- NULL
-    
-    ans <- c()
-    cat <- c()
-    for (i in 1:length(pos$col)){
-      r <- pos[i, 1]
-      c <- (pos[i, 2] - 1)
-      ans[i] <- tree_id[r, c]
-      cat[i] <- tree_id[r, 1]
-    }
-    
-    cols <- which(names(choices) %in% cat)
-    key <- as.data.frame(cbind(ans, cat, match(cat, names(choices))))
-    
     # Filter by hardiness zone
-    filtered_data <- table.output[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones, ] # nolint
+    filtered_data <- table.output[table.output$MinZone <= input$zones & table.output$MaxZone >= input$zones, ]
     
-    # Create output list
-    Scientific.Name <- filtered_data$AcceptedName
-    Common.Name <- filtered_data$CommonName.E
-    Criteria <- filtered_data$Criteria
-    More <- filtered_data[, cols + 4]
+    if(nrow(filtered_data) == 0) return(data.frame())
     
-    outputList <- as.data.frame(cbind(Scientific.Name, Common.Name, Criteria, More))
-    outputList$Scientific.Name <- as.character(outputList$Scientific.Name)
-    colnames(outputList) <- c("Scientific Name", "Common Name", "Match Score", names(choices)[cols])
-    
-    # Calculate criteria matching
-    crit <- as.data.frame(outputList$`Match Score`)
-    for(g in 1:length(cols)){
-      pattern <- paste((key$ans[key$V3 == cols[g]]), collapse = '|')
-      key_called <- unique(key$cat[key$V3 == cols[g]])
-      outputList.crit <- outputList %>%
-        mutate(yes = case_when(if_any(contains(key_called), ~ grepl(pattern, .x)) ~ + 1))
-      crit[, g] <- outputList.crit$yes
+    # Process tree input - fixed logic
+    selected_criteria <- input$tree
+    if(is.null(selected_criteria) || length(selected_criteria) == 0) {
+      selected_criteria <- herb_ids  # Use default
     }
     
-    outputList$`Match Score` <- rowSums(crit, na.rm = TRUE)
-    outputList <- arrange(outputList, desc(`Match Score`))
-    outputList
+    # Create mapping of selected criteria to categories and values using tree_mapping
+    criteria_mapping <- data.frame()
+    propagation_selected <- FALSE
+    
+    if(length(selected_criteria) > 0 && nrow(tree_mapping) > 0) {
+      # Debug: print selected criteria
+      cat("Selected criteria:", selected_criteria, "\n")
+      
+      for(sel_id in selected_criteria) {
+        # Find matching rows in tree_mapping
+        matching_rows <- tree_mapping[tree_mapping$id == sel_id, ]
+        
+        if(nrow(matching_rows) > 0) {
+          # Get the first matching row
+          match_row <- matching_rows[1, ]
+          
+          # Extract category and value
+          category <- as.character(match_row$category)
+          value <- as.character(match_row$value)
+          
+          cat("Found match - Category:", category, "Value:", value, "\n")
+          
+          # Check if this is a propagation selection
+          if(category == "Propagation.Methods") {
+            propagation_selected <- TRUE
+          }
+          
+          criteria_mapping <- rbind(criteria_mapping, data.frame(
+            category = category,
+            value = value,
+            stringsAsFactors = FALSE
+          ))
+        } else {
+          cat("No match found for ID:", sel_id, "\n")
+        }
+      }
+    }
+    
+    # Debug: print criteria mapping
+    if(nrow(criteria_mapping) > 0) {
+      cat("Criteria mapping:\n")
+      print(criteria_mapping)
+    }
+    
+    # Calculate match scores
+    filtered_data$Criteria <- 0
+    
+    if(nrow(criteria_mapping) > 0) {
+      for(i in 1:nrow(criteria_mapping)) {
+        cat_name <- criteria_mapping$category[i]
+        cat_value <- criteria_mapping$value[i]
+        
+        # Skip propagation methods for scoring (only used for display)
+        if(cat_name == "Propagation.Methods") next
+        
+        if(cat_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
+          # Get column values as character
+          col_values <- as.character(filtered_data[[cat_name]])
+          col_values[is.na(col_values)] <- ""
+          
+          cat("Matching", cat_value, "in column", cat_name, "\n")
+          
+          # Try different matching strategies
+          # 1. Exact match (case insensitive)
+          exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"), 
+                                col_values, ignore.case = TRUE)
+          
+          # 2. Contains match if no exact matches
+          if(!any(exact_matches, na.rm = TRUE)) {
+            contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), 
+                                    col_values, ignore.case = TRUE)
+            matches <- contains_matches
+          } else {
+            matches <- exact_matches
+          }
+          
+          # Update scores
+          match_count <- sum(matches, na.rm = TRUE)
+          cat("Found", match_count, "matches\n")
+          
+          filtered_data$Criteria[matches] <- filtered_data$Criteria[matches] + 1
+        }
+      }
+    }
+    
+    # Prepare output columns - only show selected characteristics (excluding propagation)
+    cols_to_show <- unique(criteria_mapping$category[criteria_mapping$category != "Propagation.Methods"])
+    cols_to_show <- cols_to_show[cols_to_show %in% names(filtered_data)]
+    
+    # Create base output
+    output_data <- data.frame(
+      "Scientific Name" = filtered_data$AcceptedName,
+      "Common Name" = filtered_data$CommonName.E,
+      "Match Score" = filtered_data$Criteria,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    
+    # Add selected characteristic columns
+    if(length(cols_to_show) > 0) {
+      for(col in cols_to_show) {
+        output_data[[col]] <- filtered_data[[col]]
+      }
+    }
+    
+    # Only add propagation description if propagation was selected
+    if(propagation_selected && "Propagation.Methods" %in% names(filtered_data)) {
+      output_data$"Propagation Description" <- filtered_data$Propagation.Methods
+    }
+    
+    # Sort by match score
+    output_data <- output_data[order(-output_data$`Match Score`), ]
+    
+    return(output_data)
   })
   
   # Results count
   output$results_count <- renderText({
     data <- listfortable()
+    if(is.null(data) || nrow(data) == 0) {
+      return("0 plants found")
+    }
     paste(nrow(data), "plants found")
   })
   
@@ -435,4 +608,5 @@ server <- function(input, output, session) {
 }
 
 ## execute the app
-shinyApp(ui = ui, server = server)
+app <- shinyApp(ui = ui, server = server)
+runApp(app, launch.browser = TRUE)
