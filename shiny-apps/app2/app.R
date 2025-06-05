@@ -2,9 +2,7 @@ rm(list=ls())
 options(stringsAsFactors = FALSE)
 options(mc.cores = parallel::detectCores())
 
-library("geodata")
-library(AOI)
-library(climateR)
+# Load required libraries
 library(sf)
 library(shiny)
 library(bslib)
@@ -12,50 +10,79 @@ library(leaflet)
 library(dplyr)
 library(ggplot2)
 library(leafpop)
-library(terra)
-setwd("Dan Vis app folder")
+library(arrow)
+library(DBI)
+library(duckdb)
 
-EF<-read_sf("data/reg1_eco_l3/reg1_eco_l3.shp")
-EF<-dplyr::filter(EF,NA_L1NAME %in% c("EASTERN TEMPERATE FORESTS","NORTHERN FORESTS"))
-#plot(EF)
+# Load climate data (keep this small lookup table in memory)
+climate_lookup <- read.csv("data/climate_lookup_table.csv")
+interpolate_climate <- readRDS("data/interpolate_climate_function.rds")
 
-new_england_spdf <- as(EF, "Spatial")
+# Create DuckDB connection for efficient data querying
+con <- dbConnect(duckdb::duckdb())
 
-v <- vect(new_england_spdf)
+# Register the parquet file as a virtual table (doesn't load into memory)
+dbExecute(con, "CREATE VIEW plant_data AS SELECT * FROM read_parquet('data/dater4tool.parquet')")
 
+# Get unique growth habits for UI (only load this small subset)
+habits <- dbGetQuery(con, "SELECT DISTINCT habit FROM plant_data ORDER BY habit")$habit
 
-cdatN<-getTerraClimNormals(
-  v,
-  c("tmax","ppt","def"),
-  scenario = "19812010",
-  month = 1:12,
-  verbose = FALSE,
-  ID = NULL,
-  dryrun = FALSE
-)
+# Helper function to build climate filter query
+build_climate_filter <- function(scenario, filter_type, climate_data) {
+  if (filter_type == "climatic water deficit") {
+    if (scenario == "contemporary") {
+      val <- climate_data$contemporary[2]
+    } else if (scenario == "low (+2C)") {
+      val <- climate_data$low[2]
+    } else {
+      val <- climate_data$med[2]
+    }
+    return(paste0("def >= ", val - 2.5, " AND def <= ", val + 2.5))
+  } else {
+    if (scenario == "contemporary") {
+      val <- climate_data$contemporary[1]
+    } else if (scenario == "low (+2C)") {
+      val <- climate_data$low[1]
+    } else {
+      val <- climate_data$med[1]
+    }
+    return(paste0("tmax >= ", val - 0.5, " AND tmax <= ", val + 0.5))
+  }
+}
 
-cdat2<-getTerraClimNormals(
-  v,
-  c("tmax","ppt","def"),
-  scenario = "2C",
-  month = 1:12,
-  verbose = FALSE,
-  ID = NULL,
-  dryrun = FALSE
-)
+# Helper function to get filtered data efficiently
+get_filtered_data <- function(scenario, filter_type, climate_data, selected_habits) {
+  climate_filter <- build_climate_filter(scenario, filter_type, climate_data)
+  
+  # Build habit filter
+  habit_filter <- paste0("habit IN ('", paste(selected_habits, collapse = "', '"), "')")
+  
+  # Combine filters
+  where_clause <- paste(climate_filter, "AND", habit_filter)
+  
+  # Execute query and return only what we need
+  query <- paste("SELECT Plot, Long, Lat, def, tmax, sps FROM plant_data WHERE", where_clause)
+  
+  return(dbGetQuery(con, query))
+}
 
-cdat4<-getTerraClimNormals(
-  v,
-  c("tmax","ppt","def"),
-  scenario = "4C",
-  month = 1:12,
-  verbose = FALSE,
-  ID = NULL,
-  dryrun = FALSE
-)
+# Helper function to get species counts
+get_species_counts <- function(scenario, filter_type, climate_data, selected_habits, top_n = 30) {
+  climate_filter <- build_climate_filter(scenario, filter_type, climate_data)
+  habit_filter <- paste0("habit IN ('", paste(selected_habits, collapse = "', '"), "')")
+  where_clause <- paste(climate_filter, "AND", habit_filter)
+  
+  query <- paste("SELECT AcceptedTaxonName, COUNT(*) as n FROM plant_data WHERE", 
+                where_clause, "GROUP BY AcceptedTaxonName ORDER BY n DESC LIMIT", top_n)
+  
+  return(dbGetQuery(con, query))
+}
 
-
-p<-read.csv("data/dater4tool.csv")
+# Helper function to get species occurrences
+get_species_occurrences <- function(species_name) {
+  query <- paste0("SELECT Plot, Long, Lat, AcceptedTaxonName, PctCov_100 FROM plant_data WHERE AcceptedTaxonName = '", species_name, "'")
+  return(dbGetQuery(con, query))
+}
 
 ui <- page_fluid(
   titlePanel("Climate Adjusted Provenancing Tool"),
@@ -63,7 +90,7 @@ ui <- page_fluid(
     sidebarPanel=sidebarPanel(width = 3,
                               card(tags$p("1) Input the coordinates of your focal site here.", style = "font-family: 'Calibri'; font-size: 16px;"),  
                                    numericInput("Long", "longitude", value = -72.5,step=0.1),
-                                   numericInput("Lat", "latitiude", value = 42.4,step=0.1)),
+                                   numericInput("Lat", "latitude", value = 42.4,step=0.1)),
                               card(tags$p("2) Select the climate projection SCENARIO and climate variable FILTER you'd like to include in the reference site finder", style = "font-family: 'Calibri'; font-size: 16px;"),
                                    
                                    selectizeInput(inputId = 'scenario',label=" choose climate scenario",choices=c("contemporary","low (+2C)","med (+4C)"),selected="contemporary"),
@@ -71,281 +98,234 @@ ui <- page_fluid(
                               
                               
                               card(tags$p("5) Select the plants growth habits of interest.", style = "font-family: 'Calibri'; font-size: 16px;"),
-                                   checkboxGroupInput("habit",label ="Growth Habit", choices = sort(unique(p$habit)),selected = unique(p$habit))),
+                                   checkboxGroupInput("habit",label ="Growth Habit", choices = habits, selected = habits)),
                               card(downloadButton("downloadData", "Download data subset from map 1"),
-                                   downloadButton("downloadData1", "Download table summary from plot 1"))#,
-                                   #downloadButton("downloadData2", "Download data subset from map 2"))
+                                   downloadButton("downloadData1", "Download table summary from plot 1"))
     ),
     mainPanel = mainPanel(
       
-      card(p("Welcome to the Climated Adjusted Provenancing Tool. You can use this tool to identify vegetation assembledges that correspond to current and future climate conditions at your location of interest and identify taxa that are widely distrubuted under these climate conditions. The data for underling this product come from Petri et al. 2022, and can be accessed in full at https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947. Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here.")),                
+      card(p("Welcome to the Climate Adjusted Provenancing Tool. You can use this tool to identify vegetation assemblages that correspond to current and future climate conditions at your location of interest and identify taxa that are widely distributed under these climate conditions. The data underlying this product come from Petri et al. 2022, and can be accessed in full at https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947. Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here.")),                
       card(p("Climate projections for your focal site:"),
            tableOutput("tellum"),height = '20vh'),
-      card(tags$p("3) View a map of climate-adjusted, potential provenancing locailities for your focal site:",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
+      card(tags$p("3) View a map of climate-adjusted, potential provenancing localities for your focal site:",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
            leafletOutput("mymap", height = '45vh'),
            p("Map 1: Click on any points to access additional information about the vegetation plot.")),
       card(
         tags$p("4) View the 30 most common species in your climate adjusted provenancing range.",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
         plotOutput("myplot",height='50vh',click = "plot_click"),
-        tags$p("6) Click on the bars to see the occurence range of individual species on the map below.",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
+        tags$p("6) Click on the bars to see the occurrence range of individual species on the map below.",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
         textOutput("variable_name"),
         leafletOutput("mymap2",height='30vh'),
-        tags$p("Map 2: The green point depict every occurrence of the select species in the dataset, and the purple points represent those that are within the climate-adjusted provenancing climatic range",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"))
+        tags$p("Map 2: The green points depict every occurrence of the selected species in the dataset, and the purple points represent those that are within the climate-adjusted provenancing climatic range",style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"))
       
     ))
 )
 
-
-server <- function(input, output,session) {
-  #####get home climate
+server <- function(input, output, session) {
   
-  myval<-reactive({
+  # Climate value lookup (same as before)
+  myval <- reactive({
     req(input$Lat, input$Long)
-    coords1<- data.frame(Long=input$Long,Lat=input$Lat)
     
-    goober<-terra::extract(cdatN$def,coords1)
-    val = apply(goober[,5:9], 1, sum)
+    climate_vals <- interpolate_climate(input$Long, input$Lat, climate_lookup)
     
-    goober2<-terra::extract(cdat2$def,coords1)
-    val2 = apply(goober2[,5:9], 1, sum)
+    myvalT <- data.frame(
+      contemporary = climate_vals$contemporary_tmax,
+      low = climate_vals$low_tmax,
+      med = climate_vals$med_tmax
+    )
     
-    goober4<-terra::extract(cdat4$def,coords1)
-    val4 = apply(goober4[,5:9], 1, sum)
+    myvalC <- data.frame(
+      contemporary = climate_vals$contemporary_def,
+      low = climate_vals$low_def,
+      med = climate_vals$med_def
+    )
     
-    myvalC<-data.frame(contemporary=val,low=val2,med=val4)
+    myvalo <- rbind(myvalT, myvalC)
+    variable <- c("maximum temperature (C)", "climatic water deficit (mm)")
+    myval <- cbind(variable, myvalo)
     
-    gooberT<-terra::extract(cdatN$tmax,coords1)
-    valT = apply(gooberT[,5:9], 1, max)
-    
-    gooberT2<-terra::extract(cdat2$tmax,coords1)
-    valT2 = apply(gooberT2[,5:9], 1, max)
-    
-    gooberT4<-terra::extract(cdat4$tmax,coords1)
-    valT4 = apply(gooberT4[,5:9], 1, max)
-    
-    myvalT<-data.frame(contemporary=valT,low=valT2,med=valT4)
-    
-    myvalo<-rbind(myvalT,myvalC)
-    
-    variable<-c("maximum temperature (C)", "climatic water deficit (mm)")
-    
-    myval<-cbind(variable,myvalo)
+    return(myval)
   })
   
-  ####present climate info in a table
-  output$tellum<-renderTable(myval())
+  output$tellum <- renderTable(myval())
   
-  ###filter map 1 based on climate range
+  # Filter data using database queries (much more memory efficient)
   filteredData <- reactive({
-    if (input$scenario=="contemporary" & input$filtr=="climatic water deficit"){
-      p %>% filter(def>=myval()$contemporary-2.5 &def<=myval()$contemporary+2.5 )  #### need to make this reactive to the climate scenario chose
-      
-    } else if (input$scenario=="low (+2C)" & input$filtr=="climatic water deficit"){
-      p %>%filter(def>=myval()$low-2.5 &def<=myval()$low+2.5 ) 
-      
-    } else if (input$scenario=="med (+4C)"& input$filtr=="climatic water deficit") {
-      p %>%filter(def>=myval()$med-2.5 &def<=myval()$med+2.5 ) 
-      
-    }else if (input$scenario=="contemporary" & input$filtr=="temperature"){
-      p %>%filter(tmax>=myval()$contemporary-.5 &tmax<=myval()$contemporary+.5 ) 
-      
-    } else if (input$scenario=="low (+2C)" & input$filtr=="temperature"){
-      p %>%filter(tmax>=myval()$low-.5 &tmax<=myval()$low+.5 ) 
-      
-    } else if (input$scenario=="med (+4C)"& input$filtr=="temperature") {
-      p %>%filter(tmax>=myval()$med-.5 &tmax<=myval()$med+.5 ) 
-      
-    }
-    
+    req(input$scenario, input$filtr, input$habit)
+    climate_data <- myval()
+    get_filtered_data(input$scenario, input$filtr, climate_data, input$habit)
   }) 
   
-  ####click on map to get species information
-  
-  #observeEvent(input$mymap_marker_click, {
-  #clicked_marker <- input$mymap_marker_click
-  #     if (!is.null(clicked_marker)) {
-  #    # Access the clicked marker's data
-  #   marker_info <- paste0("Plot: ", clicked_marker$AcceptedTaxonName, "\n")
-  #  marker_info <- paste0(marker_info, "Latitude: ", clicked_marker$lat, "\n")
-  # marker_info <- paste0(marker_info, "Longitude: ", clicked_marker$lng, "\n")
-  # Update the text output
-  #output$click_info <- renderText(marker_info)
-  #  }
-  #})
-  
-  
-  ##filter plot based on selected growth habits
+  # Get species counts using database query
   filteredData2 <- reactive({
-    filteredData()%>%
-      filter(habit %in% input$habit) %>%
-      group_by(AcceptedTaxonName) %>% count() %>% ungroup %>%
-      arrange(n) %>%top_n(n=30)
-    
+    req(input$scenario, input$filtr, input$habit)
+    climate_data <- myval()
+    get_species_counts(input$scenario, input$filtr, climate_data, input$habit, 30)
   })  
   
-  
+  # Get larger species summary for download
   filteredDataSUM <- reactive({
-    filteredData()%>%
-      filter(habit %in% input$habit) %>%
-      group_by(AcceptedTaxonName) %>% count() %>% ungroup %>%
-      arrange(-n) %>%top_n(n=150)
-    
+    req(input$scenario, input$filtr, input$habit)
+    climate_data <- myval()
+    get_species_counts(input$scenario, input$filtr, climate_data, input$habit, 150)
   }) 
   
-  
-  ###make map1
-  
+  # Make map1
   output$mymap <- renderLeaflet({
     leaflet() %>%
       addTiles() %>%
-      addScaleBar(position="bottomright") %>%
-      setView(lng = -79, lat = 40, zoom = 4 )
+      addScaleBar(position = "bottomright") %>%
+      setView(lng = -79, lat = 40, zoom = 4)
   })
   
-  
-  
   observe({
-    if (input$filtr=="climatic water deficit"){
+    filtered_data <- filteredData()
+    
+    if (nrow(filtered_data) == 0) return()
+    
+    if (input$filtr == "climatic water deficit") {
       pal <- colorNumeric(
         palette = "inferno",
-        domain = filteredData()$def
+        domain = filtered_data$def
       )
       
-      leafletProxy("mymap", data = filteredData()) %>%
+      leafletProxy("mymap", data = filtered_data) %>%
         clearControls() %>%
         clearMarkers() %>%
         addMarkers(
-          lng = ~input$Long,
-          lat = ~input$Lat) %>%
-        
-        clearShapes()%>%
+          lng = input$Long,
+          lat = input$Lat) %>%
+        clearShapes() %>%
         addCircleMarkers(
           lng = ~Long,
           lat = ~Lat,
           layerId = ~Plot,
           color = ~ pal(def),
-          popup = ~paste("<strong> PlotID: </strong>",Plot,"<br>",
-                         "<strong> Latitude: </strong>",Lat,"<br>",
-                         "<strong> Longitude: </strong>",Long,"<br>",
-                         "<strong> Community: </strong>",sps,"<br>"),
+          popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                         "<strong> Latitude: </strong>", Lat, "<br>",
+                         "<strong> Longitude: </strong>", Long, "<br>",
+                         "<strong> Community: </strong>", sps, "<br>"),
           radius = 2) %>%
-        addLegend(pal=pal,val=~def)
+        addLegend(pal = pal, values = ~def)
       
-    }else if (input$filtr=="temperature"){ 
+    } else if (input$filtr == "temperature") { 
       
       pal <- colorNumeric(
         palette = "magma",
-        domain = filteredData()$tmax
+        domain = filtered_data$tmax
       )
-      leafletProxy("mymap", data = filteredData()) %>%
+      leafletProxy("mymap", data = filtered_data) %>%
         clearControls() %>%
         clearMarkers() %>%
         addMarkers(
-          lng = ~input$Long,
-          lat = ~input$Lat) %>%
-        
-        clearShapes()%>%
+          lng = input$Long,
+          lat = input$Lat) %>%
+        clearShapes() %>%
         addCircleMarkers(
           lng = ~Long,
           lat = ~Lat,
           layerId = ~Plot,
           color = ~ pal(tmax),
-          popup = ~paste("<strong> PlotID: </strong>",Plot,"<br>",
-                         "<strong> Latitude: </strong>",Lat,"<br>",
-                         "<strong> Longitude: </strong>",Long,"<br>",
-                         "<strong> Community: </strong>",sps,"<br>"),
-          radius = 2)%>%
-        addLegend(pal=pal,val=~tmax)
-      
-      
+          popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                         "<strong> Latitude: </strong>", Lat, "<br>",
+                         "<strong> Longitude: </strong>", Long, "<br>",
+                         "<strong> Community: </strong>", sps, "<br>"),
+          radius = 2) %>%
+        addLegend(pal = pal, values = ~tmax)
     }
-    output$downloadData <- downloadHandler(
-      filename = function(){"plotsinclimate.csv"}, 
-      content = function(fname){
-        write.csv(filteredData(), fname)
-      }
-    )
-    
   })
   
+  # Download handlers
+  output$downloadData <- downloadHandler(
+    filename = function() {"plotsinclimate.csv"}, 
+    content = function(fname) {
+      write.csv(filteredData(), fname, row.names = FALSE)
+    }
+  )
   
   output$downloadData1 <- downloadHandler(
-    filename = function(){"commonspecies.csv"}, 
-    content = function(fname){
-      write.csv(filteredDataSUM(), fname)
+    filename = function() {"commonspecies.csv"}, 
+    content = function(fname) {
+      write.csv(filteredDataSUM(), fname, row.names = FALSE)
     }
   )
   
-  
-  
-  
-  
-  ##make plot
-  output$myplot<-renderPlot({ ggplot(filteredData2(),aes(y=reorder(AcceptedTaxonName,n),x=n))+geom_col()+theme_minimal(base_size = 18)+
-      ylab("")+ theme(axis.text.y = element_text(face = "italic")) 
+  # Make plot
+  output$myplot <- renderPlot({ 
+    species_data <- filteredData2()
+    if (nrow(species_data) == 0) return()
+    
+    ggplot(species_data, aes(y = reorder(AcceptedTaxonName, n), x = n)) +
+      geom_col() +
+      theme_minimal(base_size = 18) +
+      ylab("") + 
+      theme(axis.text.y = element_text(face = "italic")) 
   })
   
-  ##make it
-  
-  observeEvent(input$plot_click,{
+  # Handle plot clicks
+  observeEvent(input$plot_click, {
+    species_data <- filteredData2()
+    if (nrow(species_data) == 0) return()
+    
     click_y <- input$plot_click$y
     clicked_variable <- round(click_y)
-    output$variable_name <- renderText({
-      paste("Focal species:", filteredData2()$AcceptedTaxonName[clicked_variable])
-    })
     
-    #make map 2
-    output$mymap2 <- renderLeaflet({
-      leaflet() %>%
-        addTiles() %>%
-        addScaleBar(position="bottomright") %>%
-        setView(lng = -79, lat = 40, zoom = 4 )
-    })
-    
-    
-    filteredData3 <- reactive({
-      p %>% filter(AcceptedTaxonName==filteredData2()$AcceptedTaxonName[clicked_variable])
-    })
-    
-    filteredData4 <- reactive({
-      filteredData3() %>% filter(Plot %in% filteredData()$Plot)
-    })  
-    
-    leafletProxy("mymap2", data = filteredData3()) %>%
-      clearShapes()%>%
-      addCircles(color = "green",
-                 
-                 lng = ~Long,
-                 lat = ~Lat,radius = 4,
-                 popup = ~paste("<strong> PlotID: </strong>",Plot,"<br>",
-                                "<strong> Latitude: </strong>",Lat,"<br>",
-                                "<strong> Longitude: </strong>",Long,"<br>",
-                                "<strong> Species </strong>",AcceptedTaxonName,"<br>",
-                                "<strong> Relative Cover </strong>",paste(PctCov_100,"%"),"<br>" ))
-    
-    leafletProxy("mymap2", data = filteredData4()) %>%
-      clearMarkers() %>%
-      addCircleMarkers(color="purple",
-                       lng = ~Long,
-                       lat = ~Lat,radius= 3,
-                       popup = ~paste("<strong> PlotID: </strong>",Plot,"<br>",
-                                      "<strong> Latitude: </strong>",Lat,"<br>",
-                                      "<strong> Longitude: </strong>",Long,"<br>",
-                                      "<strong> Species </strong>",AcceptedTaxonName,"<br>",
-                                      "<strong> Relative Cover </strong>",paste(PctCov_100,"%"),"<br>" ))
-    
+    if (clicked_variable > 0 && clicked_variable <= nrow(species_data)) {
+      selected_species <- species_data$AcceptedTaxonName[clicked_variable]
+      
+      output$variable_name <- renderText({
+        paste("Focal species:", selected_species)
+      })
+      
+      # Make map 2
+      output$mymap2 <- renderLeaflet({
+        leaflet() %>%
+          addTiles() %>%
+          addScaleBar(position = "bottomright") %>%
+          setView(lng = -79, lat = 40, zoom = 4)
+      })
+      
+      # Get species occurrence data
+      species_occurrences <- get_species_occurrences(selected_species)
+      
+      # Filter to climate-matched occurrences
+      filtered_plots <- filteredData()$Plot
+      climate_matched <- species_occurrences[species_occurrences$Plot %in% filtered_plots, ]
+      
+      # Add all occurrences (green)
+      leafletProxy("mymap2", data = species_occurrences) %>%
+        clearShapes() %>%
+        clearMarkers() %>%
+        addCircles(color = "green",
+                   lng = ~Long,
+                   lat = ~Lat, radius = 4,
+                   popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                                  "<strong> Latitude: </strong>", Lat, "<br>",
+                                  "<strong> Longitude: </strong>", Long, "<br>",
+                                  "<strong> Species </strong>", AcceptedTaxonName, "<br>",
+                                  "<strong> Relative Cover </strong>", paste(PctCov_100, "%"), "<br>"))
+      
+      # Add climate-matched occurrences (purple)
+      if (nrow(climate_matched) > 0) {
+        leafletProxy("mymap2", data = climate_matched) %>%
+          addCircleMarkers(color = "purple",
+                           lng = ~Long,
+                           lat = ~Lat, radius = 3,
+                           popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                                          "<strong> Latitude: </strong>", Lat, "<br>",
+                                          "<strong> Longitude: </strong>", Long, "<br>",
+                                          "<strong> Species </strong>", AcceptedTaxonName, "<br>",
+                                          "<strong> Relative Cover </strong>", paste(PctCov_100, "%"), "<br>"))
+      }
+    }
   })
   
-  
-  output$downloadData2 <- downloadHandler(
-    filename = function(){"focalspeciesfull.csv"}, 
-    content = function(fname){
-      write.csv(filteredData3(), fname)
-    }
-  )
-  
-  
+  # Clean up database connection when app stops
+  onStop(function() {
+    dbDisconnect(con)
+  })
 }
 
-# Run the app ----
+# Run the app
 app <- shinyApp(ui = ui, server = server)
