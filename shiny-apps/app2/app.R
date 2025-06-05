@@ -22,7 +22,7 @@ interpolate_climate <- readRDS("data/interpolate_climate_function.rds")
 con <- dbConnect(duckdb::duckdb())
 
 # Register the parquet file as a virtual table (doesn't load into memory)
-dbExecute(con, "CREATE VIEW plant_data AS SELECT * FROM read_parquet('data/dater4tool.parquet')")
+dbExecute(con, "CREATE VIEW plant_data AS SELECT * FROM read_parquet('data/dater4tool_cleaned.parquet')")
 
 # Get unique growth habits for UI (only load this small subset)
 habits <- dbGetQuery(con, "SELECT DISTINCT habit FROM plant_data ORDER BY habit")$habit
@@ -61,7 +61,7 @@ get_filtered_data <- function(scenario, filter_type, climate_data, selected_habi
   where_clause <- paste(climate_filter, "AND", habit_filter)
   
   # Execute query and return only what we need
-  query <- paste("SELECT Plot, Long, Lat, def, tmax, sps FROM plant_data WHERE", where_clause)
+  query <- paste("SELECT Plot, Long, Lat, def, tmax FROM plant_data WHERE", where_clause)
   
   return(dbGetQuery(con, query))
 }
@@ -180,61 +180,84 @@ server <- function(input, output, session) {
   })
   
   observe({
-    filtered_data <- filteredData()
-    
-    if (nrow(filtered_data) == 0) return()
-    
-    if (input$filtr == "climatic water deficit") {
-      pal <- colorNumeric(
-        palette = "inferno",
-        domain = filtered_data$def
-      )
-      
-      leafletProxy("mymap", data = filtered_data) %>%
-        clearControls() %>%
-        clearMarkers() %>%
-        addMarkers(
-          lng = input$Long,
-          lat = input$Lat) %>%
-        clearShapes() %>%
-        addCircleMarkers(
-          lng = ~Long,
-          lat = ~Lat,
-          layerId = ~Plot,
-          color = ~ pal(def),
-          popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
-                         "<strong> Latitude: </strong>", Lat, "<br>",
-                         "<strong> Longitude: </strong>", Long, "<br>",
-                         "<strong> Community: </strong>", sps, "<br>"),
-          radius = 2) %>%
-        addLegend(pal = pal, values = ~def)
-      
-    } else if (input$filtr == "temperature") { 
-      
-      pal <- colorNumeric(
-        palette = "magma",
-        domain = filtered_data$tmax
-      )
-      leafletProxy("mymap", data = filtered_data) %>%
-        clearControls() %>%
-        clearMarkers() %>%
-        addMarkers(
-          lng = input$Long,
-          lat = input$Lat) %>%
-        clearShapes() %>%
-        addCircleMarkers(
-          lng = ~Long,
-          lat = ~Lat,
-          layerId = ~Plot,
-          color = ~ pal(tmax),
-          popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
-                         "<strong> Latitude: </strong>", Lat, "<br>",
-                         "<strong> Longitude: </strong>", Long, "<br>",
-                         "<strong> Community: </strong>", sps, "<br>"),
-          radius = 2) %>%
-        addLegend(pal = pal, values = ~tmax)
+  filtered_data <- filteredData()
+  
+  # Add safety check to ensure data exists and has the required columns
+  if (nrow(filtered_data) == 0 || is.null(filtered_data)) {
+    return()
+  }
+  
+  if (input$filtr == "climatic water deficit") {
+    # Check if 'def' column exists and has valid values
+    if (!"def" %in% names(filtered_data) || all(is.na(filtered_data$def))) {
+      return()
     }
-  })
+    
+    pal <- colorNumeric(
+      palette = "inferno",
+      domain = filtered_data$def,
+      na.color = "transparent"  # Handle NA values
+    )
+    
+    leafletProxy("mymap", data = filtered_data) %>%
+      clearControls() %>%
+      clearMarkers() %>%
+      addMarkers(
+        lng = input$Long,
+        lat = input$Lat) %>%
+      clearShapes() %>%
+      addCircleMarkers(
+        lng = ~Long,
+        lat = ~Lat,
+        layerId = ~Plot,
+        color = ~ pal(def),
+        popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                       "<strong> Latitude: </strong>", Lat, "<br>",
+                       "<strong> Longitude: </strong>", Long, "<br>"),
+        radius = 2) %>%
+      addLegend(
+        pal = pal, 
+        values = ~def,
+        title = "Climatic Water Deficit (mm)",
+        position = "bottomleft"
+      )
+    
+  } else if (input$filtr == "temperature") { 
+    # Check if 'tmax' column exists and has valid values
+    if (!"tmax" %in% names(filtered_data) || all(is.na(filtered_data$tmax))) {
+      return()
+    }
+    
+    pal <- colorNumeric(
+      palette = "magma",
+      domain = filtered_data$tmax,
+      na.color = "transparent"  # Handle NA values
+    )
+    
+    leafletProxy("mymap", data = filtered_data) %>%
+      clearControls() %>%
+      clearMarkers() %>%
+      addMarkers(
+        lng = input$Long,
+        lat = input$Lat) %>%
+      clearShapes() %>%
+      addCircleMarkers(
+        lng = ~Long,
+        lat = ~Lat,
+        layerId = ~Plot,
+        color = ~ pal(tmax),
+        popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                       "<strong> Latitude: </strong>", Lat, "<br>",
+                       "<strong> Longitude: </strong>", Long, "<br>"),
+        radius = 2) %>%
+      addLegend(
+        pal = pal, 
+        values = ~tmax,
+        title = "Max Temperature (°C)",
+        position = "bottomleft"
+      )
+  }
+})
   
   # Download handlers
   output$downloadData <- downloadHandler(
@@ -328,4 +351,4 @@ server <- function(input, output, session) {
 }
 
 # Run the app
-app <- shinyApp(ui = ui, server = server)
+shinyApp(ui = ui, server = server)
