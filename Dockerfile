@@ -1,11 +1,17 @@
 FROM rocker/shiny:latest
 
-# Install nginx and supervisor
+# Install nginx, supervisor, and additional system dependencies for spatial packages
 RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
     libcurl4-gnutls-dev \
     libxml2-dev \
+    libgdal-dev \
+    libproj-dev \
+    libgeos-dev \
+    libudunits2-dev \
+    libnetcdf-dev \
+    libsqlite3-dev \
     libssl-dev \
     libfontconfig1-dev \
     libharfbuzz-dev \
@@ -14,10 +20,47 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libtiff5-dev \
     libjpeg-dev \
+    # Additional dependencies for terra and geodata
+    libgeos++-dev \
+    libgeos-c1v5 \
+    gdal-bin \
+    proj-bin \
+    libproj-dev \
+    cmake \
+    build-essential \
+    # Rust dependencies for gifski package
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install R packages
-RUN R -e "install.packages(c('shiny', 'tidyverse', 'shinyWidgets', 'DT', 'stringr', 'readxl', 'shinyjs', 'rrapply', 'data.table','shinydashboard','bslib'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+# Install Rust (required for gifski package used by climateR)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set environment variables for spatial libraries
+ENV GDAL_CONFIG=/usr/bin/gdal-config
+ENV PROJ_LIB=/usr/share/proj
+
+# Install basic CRAN packages first (excluding problematic spatial ones)
+RUN R -e "install.packages(c('shiny', 'tidyverse', 'shinyWidgets', 'DT', 'stringr', 'readxl', 'shinyjs', 'rrapply', 'data.table', 'shinydashboard', 'bslib', 'dplyr', 'ggplot2', 'remotes','DBI','duckdb'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+
+# Install sf package separately (terra dependency)
+RUN R -e "install.packages('sf', repos='https://cran.rstudio.com/', configure.args='--with-proj-lib=/usr/lib/x86_64-linux-gnu/ --with-proj-include=/usr/include/')"
+
+# Install terra package with specific configuration
+RUN R -e "install.packages('terra', repos='https://cran.rstudio.com/', type='source')"
+
+# Install geodata package
+RUN R -e "install.packages('geodata', repos='https://cran.rstudio.com/', dependencies=TRUE)"
+
+# Install gifski package (requires Rust)
+RUN R -e "install.packages('gifski', repos='https://cran.rstudio.com/')"
+
+# Install remaining spatial packages
+RUN R -e "install.packages(c('leaflet', 'leafpop'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+
+# Install GitHub packages using remotes
+RUN R -e "remotes::install_github('mikejohnson51/AOI')"
+RUN R -e "remotes::install_github('mikejohnson51/climateR')"
 
 # Copy Shiny Server configuration
 COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
