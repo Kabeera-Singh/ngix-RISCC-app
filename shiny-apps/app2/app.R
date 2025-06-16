@@ -15,9 +15,10 @@ library(DBI)
 library(duckdb)
 
 # Configuration settings - adjust these as needed
-CHUNK_SIZE_DEFAULT <- 10000        # Default chunk size for data streaming
-MAP_CHUNK_SIZE <- 5000            # Chunk size for map loading
-DOWNLOAD_CHUNK_SIZE <- 5000       # Chunk size for downloads
+CHUNK_SIZE_DEFAULT <- 5000        # Default chunk size for data streaming
+MAP_CHUNK_SIZE <- 7000            # Chunk size for map loading
+DOWNLOAD_CHUNK_SIZE <- 7000       # Chunk size for downloads
+SPECIES_MAP_CHUNK_SIZE <- 7000    # Chunk size for species occurrence map loading
 SPECIES_DISPLAY_LIMIT <- 2000000     # Max species occurrences to display on map
 FILTERED_PLOTS_LIMIT <- 10000000     # Max filtered plots to process for species comparison
 
@@ -411,15 +412,20 @@ server <- function(input, output, session) {
     }
   )
   
-  # Create species abundance plot
+  # Create species abundance plot with color gradient
   output$myplot <- renderPlot({ 
     species_data <- filteredData2()
     if (nrow(species_data) == 0) return()
     
-    ggplot(species_data, aes(y = reorder(AcceptedTaxonName, n), x = n)) +
+    # Add row numbers to match the plot order (top to bottom)
+    species_data$plot_order <- nrow(species_data):1
+    
+    ggplot(species_data, aes(y = reorder(AcceptedTaxonName, n), x = n, fill = n)) +
       geom_col() +
+      scale_fill_viridis_c(name = "Count", option = "plasma") +
       theme_minimal(base_size = 18) +
       ylab("") + 
+      xlab("Number of Occurrences") +
       theme(axis.text.y = element_text(face = "italic")) 
   })
   
@@ -432,10 +438,13 @@ server <- function(input, output, session) {
     if (nrow(species_data) == 0) return()
     
     click_y <- input$plot_click$y
-    clicked_variable <- round(click_y)
+    # Fix the order - since we reorder by n (ascending), we need to reverse the index
+    clicked_variable <- nrow(species_data) - round(click_y) + 1
     
     if (clicked_variable > 0 && clicked_variable <= nrow(species_data)) {
-      new_species <- species_data$AcceptedTaxonName[clicked_variable]
+      # Get species ordered by count (descending) to match plot display
+      species_ordered <- species_data[order(species_data$n, decreasing = TRUE), ]
+      new_species <- species_ordered$AcceptedTaxonName[clicked_variable]
       
       if (is.null(selected_species()) || selected_species() != new_species) {
         selected_species(new_species)
@@ -479,46 +488,81 @@ server <- function(input, output, session) {
           climate_matched <- data.frame()
         }
         
-        # Limit points for display performance
-        if (nrow(species_occurrences) > SPECIES_DISPLAY_LIMIT) {
+        # Load species occurrences in chunks for better performance
+        total_species_points <- nrow(species_occurrences)
+        
+        if (total_species_points > SPECIES_DISPLAY_LIMIT) {
+          # Sample the data if it exceeds display limit
           species_occurrences <- species_occurrences[sample(nrow(species_occurrences), SPECIES_DISPLAY_LIMIT), ]
-          showNotification(paste("Showing sample of", SPECIES_DISPLAY_LIMIT, "species occurrences for performance"), 
+          showNotification(paste("Showing sample of", SPECIES_DISPLAY_LIMIT, "of", total_species_points, "species occurrences"), 
                           type = "message", duration = 3)
         }
         
-        # Add all occurrences (green)
-        leafletProxy("mymap2", data = species_occurrences) %>%
+        # Clear existing markers
+        leafletProxy("mymap2") %>%
           clearShapes() %>%
-          clearMarkers() %>%
-          addCircles(
-            color = "green",
-            lng = ~Long,
-            lat = ~Lat, 
-            radius = 4,
-            popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
-                           "<strong> Latitude: </strong>", Lat, "<br>",
-                           "<strong> Longitude: </strong>", Long, "<br>",
-                           "<strong> Species </strong>", AcceptedTaxonName, "<br>",
-                           "<strong> Relative Cover </strong>", paste(PctCov_100, "%"), "<br>")
-          )
+          clearMarkers()
         
-        # Add climate-matched occurrences (purple)
-        if (nrow(climate_matched) > 0) {
-          leafletProxy("mymap2", data = climate_matched) %>%
-            addCircleMarkers(
-              color = "purple",
+        # Load species occurrences in chunks
+        chunk_size <- min(SPECIES_MAP_CHUNK_SIZE, nrow(species_occurrences))
+        total_loaded_species <- 0
+        
+        while (total_loaded_species < nrow(species_occurrences)) {
+          end_idx <- min(total_loaded_species + chunk_size, nrow(species_occurrences))
+          chunk_species <- species_occurrences[(total_loaded_species + 1):end_idx, ]
+          
+          # Add all occurrences (green)
+          leafletProxy("mymap2", data = chunk_species) %>%
+            addCircles(
+              color = "green",
               lng = ~Long,
               lat = ~Lat, 
-              radius = 3,
+              radius = 4,
               popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
                              "<strong> Latitude: </strong>", Lat, "<br>",
                              "<strong> Longitude: </strong>", Long, "<br>",
                              "<strong> Species </strong>", AcceptedTaxonName, "<br>",
                              "<strong> Relative Cover </strong>", paste(PctCov_100, "%"), "<br>")
             )
+          
+          total_loaded_species <- end_idx
+          gc() # Force garbage collection after each chunk
         }
         
-        gc() # Clean up
+        # Add climate-matched occurrences in chunks (purple)
+        if (nrow(climate_matched) > 0) {
+          chunk_size_matched <- min(SPECIES_MAP_CHUNK_SIZE, nrow(climate_matched))
+          total_loaded_matched <- 0
+          
+          while (total_loaded_matched < nrow(climate_matched)) {
+            end_idx <- min(total_loaded_matched + chunk_size_matched, nrow(climate_matched))
+            chunk_matched <- climate_matched[(total_loaded_matched + 1):end_idx, ]
+            
+            leafletProxy("mymap2", data = chunk_matched) %>%
+              addCircleMarkers(
+                color = "purple",
+                lng = ~Long,
+                lat = ~Lat, 
+                radius = 3,
+                popup = ~paste("<strong> PlotID: </strong>", Plot, "<br>",
+                               "<strong> Latitude: </strong>", Lat, "<br>",
+                               "<strong> Longitude: </strong>", Long, "<br>",
+                               "<strong> Species </strong>", AcceptedTaxonName, "<br>",
+                               "<strong> Relative Cover </strong>", paste(PctCov_100, "%"), "<br>")
+              )
+            
+            total_loaded_matched <- end_idx
+            gc() # Force garbage collection after each chunk
+          }
+        }
+        
+        # Show notification for large datasets
+        if (total_species_points > 10000) {
+          showNotification(paste("Loaded", min(total_species_points, SPECIES_DISPLAY_LIMIT), "species occurrences"), 
+                           type = "message", duration = 3)
+        }
+        
+        gc() # Final cleanup
       }
     }
   })
