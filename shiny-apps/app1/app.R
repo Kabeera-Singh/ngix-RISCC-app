@@ -345,13 +345,11 @@ ui <- fluidPage(
     div(
       class = "container-fluid d-flex justify-content-between align-items-center",
       div(
-        h1("🌱 Climate Resilient Plants", class = "mb-0 h3"),
-        p("Find native plants suitable for your climate future", class = "mb-0 small opacity-75")
-      ),
+        h1("Climate-Smart Plant Selection", class = "mb-0 h3")),
       actionButton(
         "homeBtn",
         label = "Back to Home",
-        onclick = "window.open('https://ngix-webpage-latest.onrender.com', '_self')",
+        onclick = "window.open('/', '_self')",
         class = "btn btn-outline-light",
         icon = icon("home")
       )
@@ -368,7 +366,7 @@ ui <- fluidPage(
         div(
           class = "card-body",
           h5("How to Use This Tool", class = "card-title text-success"),
-          p("Select your state and current hardiness zone below. The tool will show climate-resilient plants that will thrive in your area's future climate conditions.", class = "card-text mb-0")
+          p("Select your state and desired site and plant characteristics below. The tool will generate a list of native and near-native plants likely to survive both current and future climate conditions. The plant list will be sorted based on a best match with the selection criteria you input. Plants with a higher match score meet more of your selection criteria. If you select five criteria, a plant with a match score of 5 is a perfect match.", class = "card-text mb-0")
         )
       )
     )
