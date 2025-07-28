@@ -156,14 +156,6 @@ ui <- page_fluid(
         p("Welcome to the Climate Adjusted Provenancing Tool. You can use this tool to identify vegetation assemblages that correspond to current and future climate conditions at your location of interest and identify taxa that are widely distributed under these climate conditions. The data underlying this product come from Petri et al. 2022, and can be accessed in full at https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947. Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here.")
       ),                
       card(
-        p("Climate projections for your focal site:"),
-        tableOutput("tellum")
-      ),
-      card(
-        tags$p("Data Summary:", style = "font-family: 'Calibri'; font-size: 16px;"),
-        tableOutput("data_summary")
-      ),
-      card(
         tags$p("3) View a map of climate-adjusted, potential provenancing localities for your focal site:",
                style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
         leafletOutput("mymap"),
@@ -210,38 +202,6 @@ server <- function(input, output, session) {
     
     return(myval)
   })
-  
-  output$tellum <- renderTable(myval())
-  
-  # Get data summary without loading full dataset
-  data_summary <- reactive({
-    req(input$scenario, input$filtr, input$habit)
-    climate_data <- myval()
-    climate_filter <- build_climate_filter(input$scenario, input$filtr, climate_data)
-    habit_filter <- paste0("habit IN ('", paste(input$habit, collapse = "', '"), "')")
-    where_clause <- paste(climate_filter, "AND", habit_filter)
-    
-    # Get summary statistics without loading all data
-    summary_query <- paste("SELECT COUNT(*) as total_plots, 
-                                  COUNT(DISTINCT AcceptedTaxonName) as unique_species,
-                                  MIN(Long) as min_long, MAX(Long) as max_long,
-                                  MIN(Lat) as min_lat, MAX(Lat) as max_lat
-                           FROM plant_data WHERE", where_clause)
-    
-    summary_data <- dbGetQuery(con, summary_query)
-    
-    data.frame(
-      Metric = c("Total Plots", "Unique Species", "Longitude Range", "Latitude Range"),
-      Value = c(
-        summary_data$total_plots,
-        summary_data$unique_species,
-        paste(round(summary_data$min_long, 2), "to", round(summary_data$max_long, 2)),
-        paste(round(summary_data$min_lat, 2), "to", round(summary_data$max_lat, 2))
-      )
-    )
-  }) %>% debounce(500)
-  
-  output$data_summary <- renderTable(data_summary())
   
   # Lazy loading for map data
   map_data_stream <- reactive({
