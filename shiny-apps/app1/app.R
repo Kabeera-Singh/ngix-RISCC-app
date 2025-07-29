@@ -24,11 +24,11 @@ data <- read.csv("data/ClimateSmart_Data_Cleaned.csv")
 
 # Create reference sheet mapping from new dataset columns - exclude Propagation.Methods and Rare.Status
 reference <- data.frame(
-  col = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", "Bloom.Period", 
-          "Color", "Interesting.Foliage", "Showy", "Garden.Aggressive", "Bird.Services", 
+  col = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", "Bloom.Period",
+          "Color", "Interesting.Foliage", "Showy", "Garden.Aggressive", "Bird.Services",
           "Mammal.Services", "Insect.Services", "Reptile.Amphibian.Services", "Pollinators", "Climate.Status"),
-  display = c("Growth Habit", "Sun Level", "Moisture Level", "Soil Type", "Bloom Period", 
-              "Color", "Interesting Foliage", "Showy", "Garden Aggressive", "Bird Services", 
+  display = c("Growth Habit", "Sun Level", "Moisture Level", "Soil Type", "Bloom Period",
+              "Color", "Interesting Foliage", "Showy", "Garden Aggressive", "Bird Services",
               "Mammal Services", "Insect Services", "Reptile/Amphibian Services", "Pollinators", "Climate Status"),
   sortable = rep(TRUE, 15)
 )
@@ -38,7 +38,7 @@ reference.set <- subset(reference, subset = sortable == TRUE)
 
 #consolidate and format data columns for querying
 test <- data %>%
-  dplyr::select(Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High, 
+  dplyr::select(Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
                 one_of(reference.set$col), Propagation.Methods, Propagation.Keywords, Climate.Status) %>%
   # Remove rows with missing hardiness zone information
   filter(!is.na(Hardiness.Zone.Low) & !is.na(Hardiness.Zone.High))
@@ -65,13 +65,13 @@ clean_answers <- function(text) {
   text <- str_replace_all(text, "\\s*,\\s*", ",")
   text <- str_replace_all(text, "^,+|,+$", "")  # Remove leading/trailing commas
   text <- str_replace_all(text, ",+", ",")      # Remove multiple commas
-  
+
   # Split, clean, and rejoin to remove duplicates
   items <- unlist(strsplit(text, ","))
   items <- trimws(items)
   items <- items[items != "" & !is.na(items)]
   items <- unique(items)
-  
+
   return(paste(items, collapse = ","))
 }
 
@@ -194,7 +194,7 @@ reference.set.extended <- rbind(reference.set.extended, remaining_items)
 reference.set.extended <- rbind(reference.set.extended,
   data.frame(
     col = "Propagation.Keywords",
-    display = "Propagation Keywords", 
+    display = "Propagation Keywords",
     sortable = TRUE,
     answers = paste(unique(propagation_keywords), collapse = ","),
     stringsAsFactors = FALSE
@@ -208,7 +208,7 @@ for(i in 1:nrow(reference.set.extended)) {
   options <- unlist(strsplit(reference.set.extended$answers[i], ","))
   options <- trimws(options)
   options <- options[options != "" & !is.na(options)]
-  
+
   if(length(options) > 0) {
     temp_df <- data.frame(
       category = rep(col_name, length(options)),
@@ -224,10 +224,10 @@ create_tree <- function(data) {
   categories <- unique(data$category)
   tree_list <- list()
   id_counter <- 1
-  
+
   for(cat in categories) {
     cat_data <- data[data$category == cat, ]
-    
+
     # Create category node
     cat_node <- list(
       text = reference.set.extended$display[reference.set.extended$col == cat][1],
@@ -235,7 +235,7 @@ create_tree <- function(data) {
       children = list()
     )
     id_counter <- id_counter + 1
-    
+
     # Add children
     for(j in 1:nrow(cat_data)) {
       child_node <- list(
@@ -245,10 +245,10 @@ create_tree <- function(data) {
       cat_node$children <- append(cat_node$children, list(child_node))
       id_counter <- id_counter + 1
     }
-    
+
     tree_list <- append(tree_list, list(cat_node))
   }
-  
+
   return(tree_list)
 }
 
@@ -264,7 +264,7 @@ extract_tree_info <- function(node, path = "", category = "", parent_id = "") {
           # This is a leaf node with text
           current_text <- as.character(node$text)
           current_id <- as.character(node$id)
-          
+
           # Determine if this is a category or value
           if(path == "") {
             # Top level - this is a category
@@ -286,8 +286,8 @@ extract_tree_info <- function(node, path = "", category = "", parent_id = "") {
           }
         } else {
           # Process other named elements
-          extract_tree_info(node[[name]], 
-                           ifelse(path == "", name, paste(path, name, sep = "/")), 
+          extract_tree_info(node[[name]],
+                           ifelse(path == "", name, paste(path, name, sep = "/")),
                            category, parent_id)
         }
       }
@@ -303,415 +303,400 @@ extract_tree_info <- function(node, path = "", category = "", parent_id = "") {
 # Extract the tree structure
 extract_tree_info(tree_list)
 
-# Get default "Herb" selection for Growth Habit
-herb_ids <- c()
+# Get default selection for Growth Habit - look for first available option
+default_ids <- c()
 if(nrow(tree_mapping) > 0) {
-  herb_rows <- tree_mapping[tree_mapping$category == "Growth Habit" & 
-                           grepl("Shrub", tree_mapping$value, ignore.case = TRUE), ]
-  if(nrow(herb_rows) > 0) {
-    herb_ids <- as.character(herb_rows$id[1])
-  }
-}
-
-# If no herb found, get first Growth.Habit option
-if(length(herb_ids) == 0) {
   growth_habit_rows <- tree_mapping[tree_mapping$category == "Growth Habit", ]
   if(nrow(growth_habit_rows) > 0) {
-    herb_ids <- as.character(growth_habit_rows$id[1])
+    default_ids <- as.character(growth_habit_rows$id[1])
   }
 }
 
-#######################################
-
-## specify user interface
+# Define UI with embedded HTML structure
 ui <- fluidPage(
-  # Modern theme using bslib
-  theme = bs_theme(
-    version = 4,
-    bootswatch = "flatly",
-    primary = "#2C5530",
-    success = "#5A744F",
-    info = "#8FA68E",
-    base_font = font_google("Inter"),
-    heading_font = font_google("Poppins")
-  ),
-  
-  # Include shinyjs
-  useShinyjs(),
-  
-  # Modern header
-  div(
-    class = "bg-primary text-white py-4 mb-4",
-    div(
-      class = "container-fluid d-flex justify-content-between align-items-center",
-      div(
-        h1("Climate-Smart Plant Selection", class = "mb-0 h3")),
-      actionButton(
-        "homeBtn",
-        label = "Back to Home",
-        onclick = "window.open('/', '_self')",
-        class = "btn btn-outline-light",
-        icon = icon("home")
-      )
-    )
-  ),
-  
-  # Info card
-  fluidRow(
-    class = "mb-4",
-    column(
-      width = 12,
-      div(
-        class = "card border-0 shadow-sm",
-        div(
-          class = "card-body",
-          h5("How to Use This Tool", class = "card-title text-success"),
-          p("Select your state and desired site and plant characteristics below. The tool will generate a list of native and near-native plants likely to survive both current and future climate conditions. The plant list will be sorted based on a best match with the selection criteria you input. Plants with a higher match score meet more of your selection criteria. If you select five criteria, a plant with a match score of 5 is a perfect match.", class = "card-text mb-0")
-        )
-      )
-    )
-  ),
-  
-  # Error display
-  div(id = "error-display", style = "display: none;"),
-  
-  # Main layout
-  fluidRow(
-    # Sidebar panel with modern styling
-    column(
-      width = 4,
-      div(
-        class = "card border-0 shadow-sm sticky-top",
-        style = "top: 20px;",
-        div(
-          class = "card-header bg-success text-white",
-          h5("Filter Options", class = "mb-0")
-        ),
-        div(
-          class = "card-body p-3",
-          
-          # State selection
-          div(
-            class = "mb-3",
-            selectInput(
-              inputId = "state", 
-              label = tags$span(icon("map-marker-alt"), " Choose your state"),
-              choices = c("Select" = "", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland", 
-                        "Massachusetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania", 
-                        "Rhode Island", "Vermont", "Virginia", "West Virginia"),
-              selected = "Massachusetts",
-              width = "100%"
-            )
-          ),
-          
-          # Plant characteristics
-          div(
-            class = "mt-4",
-            h6("Plant Characteristics", class = "text-success"),
-            treeInput(
-              "tree", 
-              "Select desired characteristics:",
-              tree_list, 
-              selected = herb_ids,
-              returnValue = "id", 
-              closeDepth = 1
-            )
-          )
-        )
-      )
-    ),
-    
-    # Main panel
-    column(
-      width = 8,
-      div(
-        class = "card border-0 shadow-sm",
-        div(
-          class = "card-header bg-info text-white d-flex justify-content-between align-items-center",
-          h5("Species List", class = "mb-0"),
-          div(
-            class = "badge badge-light",
-            textOutput("results_count", inline = TRUE)
-          )
-        ),
-        div(
-          class = "card-body p-0",
-          # Simple loading indicator
-          conditionalPanel(
-            condition = "$('html').hasClass('shiny-busy')",
-            div(
-              class = "text-center p-5",
-              HTML('<div class="spinner-border text-success" role="status">
-                     <span class="sr-only">Loading...</span>
-                   </div>
-                   <p class="mt-3 text-muted">Loading plant data...</p>')
-            )
-          ),
-          # Data table
-          DT::dataTableOutput("list")
-        )
-      )
-    )
-  ),
-  
-  # Footer
-  tags$footer(
-    class = "bg-light text-muted text-center py-3 mt-5",
-    p("Climate Resilient Plants Database - Helping you choose plants for future climate conditions", class = "mb-0 small")
-  ),
-  
-  # Custom CSS for improved styling
+  # Include CSS files
   tags$head(
-    tags$style(HTML("
-      .content-wrapper { 
-        padding-top: 20px; 
-      }
-      .dt-buttons { 
-        margin-bottom: 10px; 
-      }
-      .dataTables_wrapper .dataTables_length,
-      .dataTables_wrapper .dataTables_filter {
-        margin-bottom: 10px;
-      }
-      .card {
-        border-radius: 12px;
-      }
-      .btn {
-        border-radius: 8px;
-      }
-      .form-control {
-        border-radius: 6px;
-      }
-      #tree {
-        max-height: 400px;
-        overflow-y: auto;
-      }
-      .sticky-top {
-        z-index: 1020;
-      }
-      .shiny-busy .recalculating {
-        opacity: 0.5;
-      }
-    "))
+    tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
+    tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
+    tags$link(href = "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css", rel = "stylesheet"),
+    tags$link(href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", rel = "stylesheet"),
+    tags$script(src = "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js")
+  ),
+
+  # Use shinyjs
+  useShinyjs(),
+
+  # Header Section
+  div(class = "app-header",
+    div(class = "container-fluid d-flex justify-content-between align-items-center flex-wrap",
+      h1("Climate-Smart Plant Selection"),
+      a(href = "/", class = "home-btn",
+        tags$i(class = "fas fa-home"), " Back to Home"
+      )
+    )
+  ),
+
+  # Main Container
+  div(class = "container-fluid",
+    # Info Card
+    div(class = "info-card",
+      h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
+      p("Select your state and desired site and plant characteristics below. The tool will generate a list of native and near-native plants likely to survive both current and future climate conditions. The plant list will be sorted based on a best match with the selection criteria you input. Plants with a higher match score meet more of your selection criteria. If you select five criteria, a plant with a match score of 5 is a perfect match.")
+    ),
+
+    # Main Layout
+    div(class = "row",
+      # Sidebar Panel
+      div(class = "col-12 col-lg-3",
+        div(class = "filter-card",
+          div(class = "filter-header",
+            h5(tags$i(class = "fas fa-filter"), " Filter Options")
+          ),
+          div(class = "filter-body",
+            # State Selection
+            div(class = "form-group mb-4",
+              tags$label(`for` = "state",
+                tags$i(class = "fas fa-map-marker-alt"), " Choose your state"
+              ),
+              selectInput(
+                inputId = "state",
+                label = NULL,
+                choices = c("Select" = "", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland",
+                            "Massachusetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania",
+                            "Rhode Island", "Vermont", "Virginia", "West Virginia"),
+                selected = "Massachusetts",
+                width = "100%"
+              )
+            ),
+
+            # Plant Characteristics
+            div(class = "mt-4",
+              h6(class = "characteristics-title",
+                tags$i(class = "fas fa-seedling"), " Plant Characteristics"
+              ),
+              treeInput(
+                "tree",
+                label = NULL,
+                choices = tree_list,
+                returnValue = "id",
+                closeDepth = 1
+              )
+            )
+          )
+        )
+      ),
+
+      # Main Panel
+      div(class = "col-12 col-lg-9",
+        div(class = "results-card",
+          div(class = "results-header",
+            h5(tags$i(class = "fas fa-list"), " Species List"),
+            div(class = "results-count",
+              textOutput("results_count", inline = TRUE)
+            )
+          ),
+
+          # Loading Indicator
+          div(class = "loading-indicator", id = "loading", style = "display: none;",
+            div(class = "spinner-border", role = "status",
+              span(class = "visually-hidden", "Loading...")
+            ),
+            p(class = "mt-3", "Loading plant data...")
+          ),
+
+          # Data Table
+          div(class = "table-container",
+            DT::dataTableOutput("list")
+          )
+        )
+      )
+    )
+  ),
+
+  # Footer
+  tags$footer(class = "app-footer",
+    div(class = "container-fluid",
+      p("Climate Resilient Plants Database - Helping you choose plants for future climate conditions")
+    )
   )
 )
 
 ## defining data inputs and outputs
 server <- function(input, output, session) {
-  
+
+  # Add debugging to check data loading
+  observe({
+    cat("Data loaded - test nrow:", nrow(test), "\n")
+    cat("State.hz nrow:", nrow(state.hz), "\n")
+    cat("Tree mapping nrow:", nrow(tree_mapping), "\n")
+  })
+
   # Reactive function for the filtered species list
   listfortable <- reactive({
-    req(input$state)
-    
-    # Get state abbreviation and zone information
-    abbrev <- state.hz$State[state.hz$Full.Name == input$state & state.hz$Time_Period == "FutureWorst"]
-    if(length(abbrev) == 0) return(data.frame())
-    
-    table.output <- test[test$MaxZone >= state.hz$Zone.Min[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"] & 
-                         test$MinZone <= state.hz$Zone.Max[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst"],]
-    
-    # Get selected criteria from tree
-    selected_criteria <- input$tree
-    if(is.null(selected_criteria) || length(selected_criteria) == 0) {
-      selected_criteria <- herb_ids  # Use default
-    }
-    
-    # Filter by selected hardiness zones and other criteria
-    selected_zones <- c()
-    filtered_data <- table.output
-    
-    # Create mapping of selected criteria to categories and values using tree_mapping
-    criteria_mapping <- data.frame()
-    propagation_selected <- FALSE
-    
-    if(length(selected_criteria) > 0 && nrow(tree_mapping) > 0) {
-      for(sel_id in selected_criteria) {
-        matching_rows <- tree_mapping[tree_mapping$id == sel_id, ]
-        
-        if(nrow(matching_rows) > 0) {
-          match_row <- matching_rows[1, ]
-          category <- as.character(match_row$category)
-          value <- as.character(match_row$value)
-          
-          # Check if this is a hardiness zone selection
-          if(category == "Hardiness Zones") {
-            zone_num <- as.numeric(value)
-            if(!is.na(zone_num)) {
-              selected_zones <- c(selected_zones, zone_num)
+    # Add error handling and debugging
+    tryCatch({
+      req(input$state)
+      cat("Selected state:", input$state, "\n")
+
+      # Show loading indicator
+      shinyjs::show("loading")
+
+      # Check if state data exists
+      state_data <- state.hz[state.hz$Full.Name == input$state, ]
+      if(nrow(state_data) == 0) {
+        cat("No data found for state:", input$state, "\n")
+        shinyjs::hide("loading")
+        return(data.frame())
+      }
+
+      # Get state abbreviation and zone information
+      abbrev <- state.hz$State[state.hz$Full.Name == input$state & state.hz$Time_Period == "FutureWorst"]
+      if(length(abbrev) == 0) {
+        cat("No abbreviation found for state:", input$state, "\n")
+        shinyjs::hide("loading")
+        return(data.frame())
+      }
+
+      cat("State abbreviation:", abbrev, "\n")
+
+      # Get zone data
+      zone_data <- state.hz[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst", ]
+      if(nrow(zone_data) == 0) {
+        cat("No zone data found for abbreviation:", abbrev, "\n")
+        shinyjs::hide("loading")
+        return(data.frame())
+      }
+
+      zone_min <- zone_data$Zone.Min[1]
+      zone_max <- zone_data$Zone.Max[1]
+      cat("Zone range:", zone_min, "to", zone_max, "\n")
+
+      # Filter plants by hardiness zones
+      table.output <- test[test$MaxZone >= zone_min & test$MinZone <= zone_max, ]
+      cat("Plants in zone range:", nrow(table.output), "\n")
+
+      # Get selected criteria from tree
+      selected_criteria <- input$tree
+      if(is.null(selected_criteria) || length(selected_criteria) == 0) {
+        selected_criteria <- default_ids
+      }
+
+      cat("Selected criteria:", paste(selected_criteria, collapse = ", "), "\n")
+
+      # Create mapping of selected criteria to categories and values using tree_mapping
+      criteria_mapping <- data.frame()
+      propagation_selected <- FALSE
+      selected_zones <- c()
+      filtered_data <- table.output
+
+      if(length(selected_criteria) > 0 && nrow(tree_mapping) > 0) {
+        for(sel_id in selected_criteria) {
+          matching_rows <- tree_mapping[tree_mapping$id == sel_id, ]
+
+          if(nrow(matching_rows) > 0) {
+            match_row <- matching_rows[1, ]
+            category <- as.character(match_row$category)
+            value <- as.character(match_row$value)
+
+            cat("Processing criteria - Category:", category, "Value:", value, "\n")
+
+            # Check if this is a hardiness zone selection
+            if(category == "Hardiness Zones") {
+              zone_num <- as.numeric(value)
+              if(!is.na(zone_num)) {
+                selected_zones <- c(selected_zones, zone_num)
+              }
+            }
+
+            # Check if this is a propagation selection
+            if(category == "Propagation Keywords") {
+              propagation_selected <- TRUE
+            }
+
+            criteria_mapping <- rbind(criteria_mapping, data.frame(
+              category = category,
+              value = value,
+              stringsAsFactors = FALSE
+            ))
+          }
+        }
+      }
+
+      # Filter by hardiness zones if selected
+      if(length(selected_zones) > 0) {
+        zone_filter <- rep(FALSE, nrow(filtered_data))
+        for(zone in selected_zones) {
+          zone_filter <- zone_filter | (filtered_data$MinZone <= zone & filtered_data$MaxZone >= zone)
+        }
+        filtered_data <- filtered_data[zone_filter, ]
+        cat("After zone filtering:", nrow(filtered_data), "\n")
+      }
+
+      # Filter by required criteria: Growth Habit and Climate Status
+      required_categories <- c("Growth Habit", "Climate Status")
+      for(req_cat in required_categories) {
+        req_criteria <- criteria_mapping[criteria_mapping$category == req_cat, ]
+
+        if(nrow(req_criteria) > 0) {
+          # Map display name back to column name
+          if(req_cat == "Growth Habit") {
+            col_name <- "Growth.Habit"
+          } else if(req_cat == "Climate Status") {
+            col_name <- "Climate.Status"
+          }
+
+          # Apply filter for this required category
+          category_filter <- rep(FALSE, nrow(filtered_data))
+
+          for(i in 1:nrow(req_criteria)) {
+            cat_value <- req_criteria$value[i]
+
+            if(col_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
+              col_values <- as.character(filtered_data[[col_name]])
+              col_values[is.na(col_values)] <- ""
+
+              # Exact match (case insensitive)
+              exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"),
+                                    col_values, ignore.case = TRUE)
+
+              # Contains match if no exact matches
+              if(!any(exact_matches, na.rm = TRUE)) {
+                contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value),
+                                        col_values, ignore.case = TRUE)
+                matches <- contains_matches
+              } else {
+                matches <- exact_matches
+              }
+
+              category_filter <- category_filter | matches
             }
           }
-          
-          # Check if this is a propagation selection
-          if(category == "Propagation Keywords") {
-            propagation_selected <- TRUE
+
+          filtered_data <- filtered_data[category_filter, ]
+          cat("After", req_cat, "filtering:", nrow(filtered_data), "\n")
+        }
+      }
+
+      if(nrow(filtered_data) == 0) {
+        cat("No plants match criteria\n")
+        shinyjs::hide("loading")
+        return(data.frame())
+      }
+
+      # Calculate match scores for optional criteria
+      filtered_data$Criteria <- 0
+      optional_criteria <- criteria_mapping[!(criteria_mapping$category %in% c(required_categories, "Hardiness Zones", "Propagation Keywords")), ]
+
+      if(nrow(optional_criteria) > 0) {
+        for(i in 1:nrow(optional_criteria)) {
+          cat_name <- optional_criteria$category[i]
+          cat_value <- optional_criteria$value[i]
+
+          # Map display name back to column name
+          col_name <- reference.set$col[reference.set$display == cat_name]
+          if(length(col_name) == 0) {
+            col_name <- cat_name
+          } else {
+            col_name <- col_name[1]
           }
-          
-          criteria_mapping <- rbind(criteria_mapping, data.frame(
-            category = category,
-            value = value,
-            stringsAsFactors = FALSE
-          ))
-        }
-      }
-    }
-    
-    # Filter by hardiness zones if selected
-    if(length(selected_zones) > 0) {
-      zone_filter <- rep(FALSE, nrow(filtered_data))
-      for(zone in selected_zones) {
-        zone_filter <- zone_filter | (filtered_data$MinZone <= zone & filtered_data$MaxZone >= zone)
-      }
-      filtered_data <- filtered_data[zone_filter, ]
-    }
-    
-    # Filter by required criteria: Growth Habit and Climate Status
-    required_categories <- c("Growth Habit", "Climate Status")
-    for(req_cat in required_categories) {
-      req_criteria <- criteria_mapping[criteria_mapping$category == req_cat, ]
-      
-      if(nrow(req_criteria) > 0) {
-        # Map display name back to column name
-        if(req_cat == "Growth Habit") {
-          col_name <- "Growth.Habit"
-        } else if(req_cat == "Climate Status") {
-          col_name <- "Climate.Status"
-        }
-        
-        # Apply filter for this required category
-        category_filter <- rep(FALSE, nrow(filtered_data))
-        
-        for(i in 1:nrow(req_criteria)) {
-          cat_value <- req_criteria$value[i]
-          
+
           if(col_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
             col_values <- as.character(filtered_data[[col_name]])
             col_values[is.na(col_values)] <- ""
-            
+
             # Exact match (case insensitive)
-            exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"), 
+            exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"),
                                   col_values, ignore.case = TRUE)
-            
+
             # Contains match if no exact matches
             if(!any(exact_matches, na.rm = TRUE)) {
-              contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), 
+              contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value),
                                       col_values, ignore.case = TRUE)
               matches <- contains_matches
             } else {
               matches <- exact_matches
             }
-            
-            category_filter <- category_filter | matches
+
+            filtered_data$Criteria[matches] <- filtered_data$Criteria[matches] + 1
           }
         }
-        
-        filtered_data <- filtered_data[category_filter, ]
       }
-    }
-    
-    if(nrow(filtered_data) == 0) return(data.frame())
-    
-    # Calculate match scores for optional criteria (excluding required ones and hardiness zones)
-    filtered_data$Criteria <- 0
-    optional_criteria <- criteria_mapping[!(criteria_mapping$category %in% c(required_categories, "Hardiness Zones", "Propagation Keywords")), ]
-    
-    if(nrow(optional_criteria) > 0) {
-      for(i in 1:nrow(optional_criteria)) {
-        cat_name <- optional_criteria$category[i]
-        cat_value <- optional_criteria$value[i]
-        
-        # Map display name back to column name
-        col_name <- reference.set$col[reference.set$display == cat_name]
-        if(length(col_name) == 0) {
-          col_name <- cat_name
+
+      # *** RETAINED LOGIC FROM app_old.R FOR TABLE GENERATION ***
+      # Prepare output columns - always include Growth Habit and Climate Status
+      cols_to_show <- unique(c("Growth.Habit", "Climate.Status",
+                             criteria_mapping$category[!(criteria_mapping$category %in%
+                             c("Propagation Keywords", "Hardiness Zones", "Growth Habit", "Climate Status"))]))
+
+      # Map display names back to column names
+      actual_cols <- c()
+      for(col in cols_to_show) {
+        if(col == "Growth Habit") {
+          actual_cols <- c(actual_cols, "Growth.Habit")
+        } else if(col == "Climate Status") {
+          actual_cols <- c(actual_cols, "Climate.Status")
         } else {
-          col_name <- col_name[1]
+          mapped_col <- reference.set$col[reference.set$display == col]
+          if(length(mapped_col) > 0) {
+            actual_cols <- c(actual_cols, mapped_col[1])
+          }
         }
-        
-        if(col_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
-          col_values <- as.character(filtered_data[[col_name]])
-          col_values[is.na(col_values)] <- ""
-          
-          # Exact match (case insensitive)
-          exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"), 
-                                col_values, ignore.case = TRUE)
-          
-          # Contains match if no exact matches
-          if(!any(exact_matches, na.rm = TRUE)) {
-            contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), 
-                                    col_values, ignore.case = TRUE)
-            matches <- contains_matches
+      }
+
+      actual_cols <- actual_cols[actual_cols %in% names(filtered_data)]
+
+      # Create base output
+      output_data <- data.frame(
+        "Scientific Name" = filtered_data$AcceptedName,
+        "Common Name" = filtered_data$CommonName.E,
+        "Match Score" = filtered_data$Criteria,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+
+      # Add Growth Habit and Climate Status first
+      if("Growth.Habit" %in% names(filtered_data)) {
+        output_data$"Growth Habit" <- filtered_data$Growth.Habit
+      }
+      if("Climate.Status" %in% names(filtered_data)) {
+        output_data$"Climate Status" <- filtered_data$Climate.Status
+      }
+
+      # Add other selected characteristic columns
+      remaining_cols <- actual_cols[!(actual_cols %in% c("Growth.Habit", "Climate.Status"))]
+      if(length(remaining_cols) > 0) {
+        for(col in remaining_cols) {
+          display_name <- reference.set$display[reference.set$col == col]
+          if(length(display_name) > 0) {
+            output_data[[display_name[1]]] <- filtered_data[[col]]
           } else {
-            matches <- exact_matches
+            output_data[[col]] <- filtered_data[[col]]
           }
-          
-          filtered_data$Criteria[matches] <- filtered_data$Criteria[matches] + 1
         }
       }
-    }
-    
-    # Prepare output columns - always include Growth Habit and Climate Status
-    cols_to_show <- unique(c("Growth.Habit", "Climate.Status", 
-                           criteria_mapping$category[!(criteria_mapping$category %in% 
-                           c("Propagation Keywords", "Hardiness Zones", "Growth Habit", "Climate Status"))]))
-    
-    # Map display names back to column names
-    actual_cols <- c()
-    for(col in cols_to_show) {
-      if(col == "Growth Habit") {
-        actual_cols <- c(actual_cols, "Growth.Habit")
-      } else if(col == "Climate Status") {
-        actual_cols <- c(actual_cols, "Climate.Status")
-      } else {
-        mapped_col <- reference.set$col[reference.set$display == col]
-        if(length(mapped_col) > 0) {
-          actual_cols <- c(actual_cols, mapped_col[1])
-        }
+
+      # Add propagation description if propagation keyword was selected
+      if(propagation_selected && "Propagation.Methods" %in% names(filtered_data)) {
+        output_data$"Propagation Description" <- filtered_data$Propagation.Methods
       }
-    }
-    
-    actual_cols <- actual_cols[actual_cols %in% names(filtered_data)]
-    
-    # Create base output (removed Hardiness Zone column)
-    output_data <- data.frame(
-      "Scientific Name" = filtered_data$AcceptedName,
-      "Common Name" = filtered_data$CommonName.E,
-      "Match Score" = filtered_data$Criteria,
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    
-    # Add Growth Habit and Climate Status first
-    if("Growth.Habit" %in% names(filtered_data)) {
-      output_data$"Growth Habit" <- filtered_data$Growth.Habit
-    }
-    if("Climate.Status" %in% names(filtered_data)) {
-      output_data$"Climate Status" <- filtered_data$Climate.Status
-    }
-    
-    # Add other selected characteristic columns
-    remaining_cols <- actual_cols[!(actual_cols %in% c("Growth.Habit", "Climate.Status"))]
-    if(length(remaining_cols) > 0) {
-      for(col in remaining_cols) {
-        display_name <- reference.set$display[reference.set$col == col]
-        if(length(display_name) > 0) {
-          output_data[[display_name[1]]] <- filtered_data[[col]]
-        } else {
-          output_data[[col]] <- filtered_data[[col]]
-        }
-      }
-    }
-    
-    # Add propagation description if propagation keyword was selected
-    if(propagation_selected && "Propagation.Methods" %in% names(filtered_data)) {
-      output_data$"Propagation Description" <- filtered_data$Propagation.Methods
-    }
-    
-    # Sort by match score
-    output_data <- output_data[order(-output_data$`Match Score`), ]
-    
-    return(output_data)
+
+      # Sort by match score
+      output_data <- output_data[order(-output_data$`Match Score`), ]
+
+      cat("Final output data rows:", nrow(output_data), "\n")
+
+      # Hide loading indicator
+      shinyjs::hide("loading")
+
+      return(output_data)
+
+    }, error = function(e) {
+      cat("Error in listfortable:", e$message, "\n")
+      shinyjs::hide("loading")
+      return(data.frame())
+    })
   })
-  
+
   # Results count
   output$results_count <- renderText({
     data <- listfortable()
@@ -720,44 +705,49 @@ server <- function(input, output, session) {
     }
     paste(nrow(data), "plants found")
   })
-  
-  # Data table output
+
+  # Data table output with error handling
   output$list <- DT::renderDataTable({
-    data <- listfortable()
-    
-    if(is.null(data) || nrow(data) == 0) {
-      empty_df <- data.frame("Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state.")
-      return(datatable(empty_df, options = list(dom = 't', searching = FALSE), 
-                      rownames = FALSE, colnames = ""))
-    }
-    
-    datatable(
-      data,
-      extensions = c('Buttons', 'Responsive'),
-      options = list(
-        dom = 'Bfrtip',
-        buttons = list(
-          list(extend = 'csv', text = 'Download CSV'),
-          list(extend = 'excel', text = 'Download Excel'),
-          list(extend = 'pdf', text = 'Download PDF')
+    tryCatch({
+      data <- listfortable()
+
+      if(is.null(data) || nrow(data) == 0) {
+        empty_df <- data.frame("Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state.")
+        return(datatable(empty_df, options = list(dom = 't', searching = FALSE),
+                        rownames = FALSE, colnames = ""))
+      }
+
+      datatable(
+        data,
+        extensions = c('Buttons', 'Responsive'),
+        options = list(
+          dom = 'Bfrtip',
+          buttons = list(
+            list(extend = 'csv', text = 'Download CSV'),
+            list(extend = 'excel', text = 'Download Excel'),
+            list(extend = 'pdf', text = 'Download PDF')
+          ),
+          responsive = TRUE,
+          pageLength = 15,
+          scrollX = TRUE
         ),
-        responsive = TRUE,
-        pageLength = 15,
-        scrollX = TRUE
-      ),
-      rownames = FALSE,
-      class = 'table-hover'
-    ) %>%
-      formatStyle(
-        'Match Score',
-        backgroundColor = styleInterval(c(1, 3, 5), 
-                                      c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7')),
-        fontWeight = 'bold'
-      )
+        rownames = FALSE,
+        class = 'table-hover'
+      ) %>%
+        formatStyle(
+          'Match Score',
+          backgroundColor = styleInterval(c(1, 3, 5),
+                                        c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7')),
+          fontWeight = 'bold'
+        )
+    }, error = function(e) {
+      cat("Error in renderDataTable:", e$message, "\n")
+      empty_df <- data.frame("Error" = paste("Error loading data:", e$message))
+      return(datatable(empty_df, options = list(dom = 't', searching = FALSE),
+                      rownames = FALSE, colnames = ""))
+    })
   })
 }
 
 ## execute the app
 shinyApp(ui = ui, server = server)
-# app <- shinyApp(ui = ui, server = server)
-# runApp(app, launch.browser = TRUE)
