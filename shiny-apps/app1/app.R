@@ -318,9 +318,7 @@ ui <- fluidPage(
   tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
     tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
-    tags$link(href = "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css", rel = "stylesheet"),
-    tags$link(href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", rel = "stylesheet"),
-    tags$script(src = "https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js")
+    tags$link(href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", rel = "stylesheet")
   ),
 
   # Use shinyjs
@@ -328,7 +326,7 @@ ui <- fluidPage(
 
   # Header Section
   div(class = "app-header",
-    div(class = "container-fluid d-flex justify-content-between align-items-center flex-wrap",
+    div(class = "header-container",
       h1("Climate-Smart Plant Selection"),
       a(href = "/", class = "home-btn",
         tags$i(class = "fas fa-home"), " Back to Home"
@@ -337,7 +335,7 @@ ui <- fluidPage(
   ),
 
   # Main Container
-  div(class = "container-fluid",
+  div(class = "main-container",
     # Info Card
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
@@ -345,16 +343,16 @@ ui <- fluidPage(
     ),
 
     # Main Layout
-    div(class = "row",
+    div(class = "main-layout",
       # Sidebar Panel
-      div(class = "col-12 col-lg-3",
+      div(class = "sidebar",
         div(class = "filter-card",
           div(class = "filter-header",
             h5(tags$i(class = "fas fa-filter"), " Filter Options")
           ),
           div(class = "filter-body",
             # State Selection
-            div(class = "form-group mb-4",
+            div(class = "form-group",
               tags$label(`for` = "state",
                 tags$i(class = "fas fa-map-marker-alt"), " Choose your state"
               ),
@@ -364,13 +362,11 @@ ui <- fluidPage(
                 choices = c("Select" = "", "Connecticut", "Delaware", "Kentucky", "Maine", "Maryland",
                             "Massachusetts", "New Hampshire", "New Jersey", "New York", "Pennsylvania",
                             "Rhode Island", "Vermont", "Virginia", "West Virginia"),
-                selected = "Massachusetts",
                 width = "100%"
               )
             ),
-
             # Plant Characteristics
-            div(class = "mt-4",
+            div(class = "characteristics-section",
               h6(class = "characteristics-title",
                 tags$i(class = "fas fa-seedling"), " Plant Characteristics"
               ),
@@ -387,7 +383,7 @@ ui <- fluidPage(
       ),
 
       # Main Panel
-      div(class = "col-12 col-lg-9",
+      div(class = "main-panel",
         div(class = "results-card",
           div(class = "results-header",
             h5(tags$i(class = "fas fa-list"), " Species List"),
@@ -398,10 +394,8 @@ ui <- fluidPage(
 
           # Loading Indicator
           div(class = "loading-indicator", id = "loading", style = "display: none;",
-            div(class = "spinner-border", role = "status",
-              span(class = "visually-hidden", "Loading...")
-            ),
-            p(class = "mt-3", "Loading plant data...")
+            div(class = "spinner"),
+            p("Loading plant data...")
           ),
 
           # Data Table
@@ -415,7 +409,7 @@ ui <- fluidPage(
 
   # Footer
   tags$footer(class = "app-footer",
-    div(class = "container-fluid",
+    div(class = "footer-container",
       p("Climate Resilient Plants Database - Helping you choose plants for future climate conditions")
     )
   )
