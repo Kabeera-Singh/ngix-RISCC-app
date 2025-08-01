@@ -201,7 +201,6 @@ reference.set.extended <- rbind(reference.set.extended,
   )
 )
 
-#make tree - improved version
 tree_data <- data.frame()
 for(i in 1:nrow(reference.set.extended)) {
   col_name <- reference.set.extended$col[i]
@@ -312,6 +311,12 @@ if(nrow(tree_mapping) > 0) {
   }
 }
 
+# Create filtered tree list (excluding hardiness zones)
+tree_list_filtered <- tree_list[!sapply(tree_list, function(x) x$text == "Hardiness Zones")]
+
+# tree_mapping_filtered <- tree_mapping[tree_mapping$category, ]
+tree_mapping_filtered <- tree_mapping[tree_mapping$category != "Hardiness Zones", ]
+
 # Define UI with embedded HTML structure
 ui <- fluidPage(
   # Include CSS files
@@ -367,15 +372,21 @@ ui <- fluidPage(
             ),
             # Plant Characteristics
             div(class = "characteristics-section",
-              h6(class = "characteristics-title",
-                tags$i(class = "fas fa-seedling"), " Plant Characteristics"
+              div(class = "characteristics-header",
+                h6(class = "characteristics-title",
+                  tags$i(class = "fas fa-seedling"), " Plant Characteristics"
+                ),
+                actionButton("clear_filters", "Clear All", 
+                           class = "btn-clear", 
+                           style = "margin-left: auto;")
               ),
+              # Other Plant Characteristics (now includes hardiness zones)
               treeInput(
                 "tree",
                 label = NULL,
-                choices = tree_list,
+                choices = tree_list,  # Now includes hardiness zones
                 returnValue = "id",
-                closeDepth = 1
+                closeDepth = 0  # All collapsed initially
               )
             )
           )
@@ -392,11 +403,11 @@ ui <- fluidPage(
             )
           ),
 
-          # Loading Indicator
-          div(class = "loading-indicator", id = "loading", style = "display: none;",
-            div(class = "spinner"),
-            p("Loading plant data...")
-          ),
+          # # Loading Indicator
+          # div(class = "loading-indicator", id = "loading", style = "display: none;",
+          #   div(class = "spinner"),
+          #   p("Loading plant data...")
+          # ),
 
           # Data Table
           div(class = "table-container",
@@ -425,9 +436,14 @@ server <- function(input, output, session) {
     cat("Tree mapping nrow:", nrow(tree_mapping), "\n")
   })
 
+  # Clear filters button
+  observeEvent(input$clear_filters, {
+    updateTreeInput(session, "tree", selected = character(0))
+    # No need to clear separate zone selectors anymore
+  })
+
   # Reactive function for the filtered species list
   listfortable <- reactive({
-    # Add error handling and debugging
     tryCatch({
       req(input$state)
       cat("Selected state:", input$state, "\n")
@@ -435,7 +451,7 @@ server <- function(input, output, session) {
       # Show loading indicator
       shinyjs::show("loading")
 
-      # Check if state data exists
+      # Get state data and zone information (same as before)
       state_data <- state.hz[state.hz$Full.Name == input$state, ]
       if(nrow(state_data) == 0) {
         cat("No data found for state:", input$state, "\n")
@@ -443,7 +459,6 @@ server <- function(input, output, session) {
         return(data.frame())
       }
 
-      # Get state abbreviation and zone information
       abbrev <- state.hz$State[state.hz$Full.Name == input$state & state.hz$Time_Period == "FutureWorst"]
       if(length(abbrev) == 0) {
         cat("No abbreviation found for state:", input$state, "\n")
@@ -451,9 +466,6 @@ server <- function(input, output, session) {
         return(data.frame())
       }
 
-      cat("State abbreviation:", abbrev, "\n")
-
-      # Get zone data
       zone_data <- state.hz[state.hz$State == abbrev & state.hz$Time_Period == "FutureWorst", ]
       if(nrow(zone_data) == 0) {
         cat("No zone data found for abbreviation:", abbrev, "\n")
@@ -463,25 +475,20 @@ server <- function(input, output, session) {
 
       zone_min <- zone_data$Zone.Min[1]
       zone_max <- zone_data$Zone.Max[1]
-      cat("Zone range:", zone_min, "to", zone_max, "\n")
 
-      # Filter plants by hardiness zones
+      # Filter plants by state hardiness zones
       table.output <- test[test$MaxZone >= zone_min & test$MinZone <= zone_max, ]
-      cat("Plants in zone range:", nrow(table.output), "\n")
 
       # Get selected criteria from tree
       selected_criteria <- input$tree
-      if(is.null(selected_criteria) || length(selected_criteria) == 0) {
-        selected_criteria <- default_ids
+      if(is.null(selected_criteria)) {
+        selected_criteria <- character(0)
       }
 
-      cat("Selected criteria:", paste(selected_criteria, collapse = ", "), "\n")
-
-      # Create mapping of selected criteria to categories and values using tree_mapping
+      # Process selected criteria including hardiness zones
       criteria_mapping <- data.frame()
+      hardiness_zones_selected <- c()
       propagation_selected <- FALSE
-      selected_zones <- c()
-      filtered_data <- table.output
 
       if(length(selected_criteria) > 0 && nrow(tree_mapping) > 0) {
         for(sel_id in selected_criteria) {
@@ -492,18 +499,9 @@ server <- function(input, output, session) {
             category <- as.character(match_row$category)
             value <- as.character(match_row$value)
 
-            cat("Processing criteria - Category:", category, "Value:", value, "\n")
-
-            # Check if this is a hardiness zone selection
             if(category == "Hardiness Zones") {
-              zone_num <- as.numeric(value)
-              if(!is.na(zone_num)) {
-                selected_zones <- c(selected_zones, zone_num)
-              }
-            }
-
-            # Check if this is a propagation selection
-            if(category == "Propagation Keywords") {
+              hardiness_zones_selected <- c(hardiness_zones_selected, as.numeric(value))
+            } else if(category == "Propagation Keywords") {
               propagation_selected <- TRUE
             }
 
@@ -516,44 +514,40 @@ server <- function(input, output, session) {
         }
       }
 
-      # Filter by hardiness zones if selected
-      if(length(selected_zones) > 0) {
-        zone_filter <- rep(FALSE, nrow(filtered_data))
-        for(zone in selected_zones) {
-          zone_filter <- zone_filter | (filtered_data$MinZone <= zone & filtered_data$MaxZone >= zone)
-        }
-        filtered_data <- filtered_data[zone_filter, ]
-        cat("After zone filtering:", nrow(filtered_data), "\n")
+      # Apply hardiness zone filtering if selected
+      if(length(hardiness_zones_selected) > 0) {
+        min_selected_zone <- min(hardiness_zones_selected)
+        max_selected_zone <- max(hardiness_zones_selected)
+        
+        # Filter to plants that can survive in the selected zone range
+        table.output <- table.output[
+          table.output$MinZone <= max_selected_zone & 
+          table.output$MaxZone >= min_selected_zone, 
+        ]
       }
 
+      # Apply other filters (same logic as before for required and optional criteria)
+      filtered_data <- table.output
+      
       # Filter by required criteria: Growth Habit and Climate Status
       required_categories <- c("Growth Habit", "Climate Status")
       for(req_cat in required_categories) {
         req_criteria <- criteria_mapping[criteria_mapping$category == req_cat, ]
-
         if(nrow(req_criteria) > 0) {
-          # Map display name back to column name
           if(req_cat == "Growth Habit") {
             col_name <- "Growth.Habit"
           } else if(req_cat == "Climate Status") {
             col_name <- "Climate.Status"
           }
 
-          # Apply filter for this required category
           category_filter <- rep(FALSE, nrow(filtered_data))
-
           for(i in 1:nrow(req_criteria)) {
             cat_value <- req_criteria$value[i]
-
             if(col_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
               col_values <- as.character(filtered_data[[col_name]])
               col_values[is.na(col_values)] <- ""
-
-              # Exact match (case insensitive)
               exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"),
                                     col_values, ignore.case = TRUE)
-
-              # Contains match if no exact matches
               if(!any(exact_matches, na.rm = TRUE)) {
                 contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value),
                                         col_values, ignore.case = TRUE)
@@ -561,32 +555,27 @@ server <- function(input, output, session) {
               } else {
                 matches <- exact_matches
               }
-
               category_filter <- category_filter | matches
             }
           }
-
           filtered_data <- filtered_data[category_filter, ]
-          cat("After", req_cat, "filtering:", nrow(filtered_data), "\n")
         }
       }
 
       if(nrow(filtered_data) == 0) {
-        cat("No plants match criteria\n")
         shinyjs::hide("loading")
         return(data.frame())
       }
 
       # Calculate match scores for optional criteria
       filtered_data$Criteria <- 0
-      optional_criteria <- criteria_mapping[!(criteria_mapping$category %in% c(required_categories, "Hardiness Zones", "Propagation Keywords")), ]
+      optional_criteria <- criteria_mapping[!(criteria_mapping$category %in% 
+                                            c(required_categories, "Propagation Keywords", "Hardiness Zones")), ]
 
       if(nrow(optional_criteria) > 0) {
         for(i in 1:nrow(optional_criteria)) {
           cat_name <- optional_criteria$category[i]
           cat_value <- optional_criteria$value[i]
-
-          # Map display name back to column name
           col_name <- reference.set$col[reference.set$display == cat_name]
           if(length(col_name) == 0) {
             col_name <- cat_name
@@ -597,12 +586,8 @@ server <- function(input, output, session) {
           if(col_name %in% names(filtered_data) && !is.na(cat_value) && cat_value != "") {
             col_values <- as.character(filtered_data[[col_name]])
             col_values[is.na(col_values)] <- ""
-
-            # Exact match (case insensitive)
             exact_matches <- grepl(paste0("\\b", gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value), "\\b"),
                                   col_values, ignore.case = TRUE)
-
-            # Contains match if no exact matches
             if(!any(exact_matches, na.rm = TRUE)) {
               contains_matches <- grepl(gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", cat_value),
                                       col_values, ignore.case = TRUE)
@@ -610,45 +595,33 @@ server <- function(input, output, session) {
             } else {
               matches <- exact_matches
             }
-
             filtered_data$Criteria[matches] <- filtered_data$Criteria[matches] + 1
           }
         }
       }
 
-      # *** RETAINED LOGIC FROM app_old.R FOR TABLE GENERATION ***
-      # Prepare output columns - always include Growth Habit and Climate Status
-      cols_to_show <- unique(c("Growth.Habit", "Climate.Status",
-                             criteria_mapping$category[!(criteria_mapping$category %in%
-                             c("Propagation Keywords", "Hardiness Zones", "Growth Habit", "Climate Status"))]))
-
-      # Map display names back to column names
-      actual_cols <- c()
-      for(col in cols_to_show) {
-        if(col == "Growth Habit") {
-          actual_cols <- c(actual_cols, "Growth.Habit")
-        } else if(col == "Climate Status") {
-          actual_cols <- c(actual_cols, "Climate.Status")
-        } else {
-          mapped_col <- reference.set$col[reference.set$display == col]
-          if(length(mapped_col) > 0) {
-            actual_cols <- c(actual_cols, mapped_col[1])
-          }
-        }
+      # Add bonus point for hardiness zone selection
+      if(length(hardiness_zones_selected) > 0) {
+        filtered_data$Criteria <- filtered_data$Criteria + 1
       }
 
-      actual_cols <- actual_cols[actual_cols %in% names(filtered_data)]
+      # Prepare output columns - ALWAYS include all selected characteristics
+      cols_to_show <- unique(c("Growth.Habit", "Climate.Status",
+                             criteria_mapping$category[!(criteria_mapping$category %in%
+                             c("Propagation Keywords", "Growth Habit", "Climate Status"))]))
 
-      # Create base output
+      # Create base output with all basic columns
       output_data <- data.frame(
+        "Match Score" = filtered_data$Criteria,
         "Scientific Name" = filtered_data$AcceptedName,
         "Common Name" = filtered_data$CommonName.E,
-        "Match Score" = filtered_data$Criteria,
+        "Min Zone" = filtered_data$MinZone,
+        "Max Zone" = filtered_data$MaxZone,
         stringsAsFactors = FALSE,
         check.names = FALSE
       )
 
-      # Add Growth Habit and Climate Status first
+      # Add Growth Habit and Climate Status
       if("Growth.Habit" %in% names(filtered_data)) {
         output_data$"Growth Habit" <- filtered_data$Growth.Habit
       }
@@ -656,15 +629,19 @@ server <- function(input, output, session) {
         output_data$"Climate Status" <- filtered_data$Climate.Status
       }
 
-      # Add other selected characteristic columns
-      remaining_cols <- actual_cols[!(actual_cols %in% c("Growth.Habit", "Climate.Status"))]
-      if(length(remaining_cols) > 0) {
-        for(col in remaining_cols) {
-          display_name <- reference.set$display[reference.set$col == col]
-          if(length(display_name) > 0) {
-            output_data[[display_name[1]]] <- filtered_data[[col]]
+      # Add all other selected characteristic columns
+      other_cols <- cols_to_show[!(cols_to_show %in% c("Growth.Habit", "Climate.Status", "Hardiness Zones"))]
+      if(length(other_cols) > 0) {
+        for(col in other_cols) {
+          if(col %in% reference.set$col) {
+            display_name <- reference.set$display[reference.set$col == col][1]
+            output_data[[display_name]] <- filtered_data[[col]]
           } else {
-            output_data[[col]] <- filtered_data[[col]]
+            # Try to find matching column
+            matching_col <- reference.set$col[reference.set$display == col]
+            if(length(matching_col) > 0 && matching_col[1] %in% names(filtered_data)) {
+              output_data[[col]] <- filtered_data[[matching_col[1]]]
+            }
           }
         }
       }
@@ -674,14 +651,10 @@ server <- function(input, output, session) {
         output_data$"Propagation Description" <- filtered_data$Propagation.Methods
       }
 
-      # Sort by match score
+      # Sort by match score (highest first)
       output_data <- output_data[order(-output_data$`Match Score`), ]
 
-      cat("Final output data rows:", nrow(output_data), "\n")
-
-      # Hide loading indicator
       shinyjs::hide("loading")
-
       return(output_data)
 
     }, error = function(e) {
@@ -700,47 +673,90 @@ server <- function(input, output, session) {
     paste(nrow(data), "plants found")
   })
 
-  # Data table output with error handling
-  output$list <- DT::renderDataTable({
-    tryCatch({
-      data <- listfortable()
+  # Data table output with enhanced scrolling and match score highlighting
+output$list <- DT::renderDataTable({
+  tryCatch({
+    data <- listfortable()
 
-      if(is.null(data) || nrow(data) == 0) {
-        empty_df <- data.frame("Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state.")
-        return(datatable(empty_df, options = list(dom = 't', searching = FALSE),
-                        rownames = FALSE, colnames = ""))
-      }
-
-      datatable(
-        data,
-        extensions = c('Buttons', 'Responsive'),
-        options = list(
-          dom = 'Bfrtip',
-          buttons = list(
-            list(extend = 'csv', text = 'Download CSV'),
-            list(extend = 'excel', text = 'Download Excel'),
-            list(extend = 'pdf', text = 'Download PDF')
-          ),
-          responsive = TRUE,
-          pageLength = 15,
-          scrollX = TRUE
-        ),
-        rownames = FALSE,
-        class = 'table-hover'
-      ) %>%
-        formatStyle(
-          'Match Score',
-          backgroundColor = styleInterval(c(1, 3, 5),
-                                        c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7')),
-          fontWeight = 'bold'
-        )
-    }, error = function(e) {
-      cat("Error in renderDataTable:", e$message, "\n")
-      empty_df <- data.frame("Error" = paste("Error loading data:", e$message))
+    if(is.null(data) || nrow(data) == 0) {
+      empty_df <- data.frame("Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state.")
       return(datatable(empty_df, options = list(dom = 't', searching = FALSE),
                       rownames = FALSE, colnames = ""))
-    })
+    }
+
+    # FIXED CONFIGURATION - REMOVES SCROLLING CONFLICTS
+    datatable(
+      data,
+      extensions = c('Buttons'),
+      options = list(
+        # BASIC SETTINGS
+        dom = 'Bfrtip',
+        pageLength = 20,
+        
+        # CRITICAL FIX: Remove scrollX and scrollY to prevent conflicts
+        scrollX = TRUE,
+        scrollY = FALSE,
+        
+        # COLUMN DEFINITIONS - SIMPLIFIED
+        columnDefs = list(
+          # list(targets = 0, width = "90px", className = "dt-center"),   # Match Score
+          # list(targets = 1, width = "200px"),                           # Scientific Name  
+          # list(targets = 2, width = "180px"),                           # Common Name
+          # list(targets = 3, width = "80px", className = "dt-center"),   # Min Zone
+          # list(targets = 4, width = "80px", className = "dt-center"),   # Max Zone
+          list(targets = "_all", width = "150px")                       # All other columns
+        ),
+        
+        # EXPORT BUTTONS
+        buttons = list(
+          list(extend = 'csv', text = 'Download CSV'),
+          list(extend = 'excel', text = 'Download Excel'),
+          list(extend = 'pdf', text = 'Download PDF')
+        ),
+        
+        # TABLE BEHAVIOR
+        responsive = FALSE,
+        autoWidth = FALSE,
+        searching = TRUE,
+        lengthChange = TRUE,
+        info = TRUE,
+        paging = TRUE,
+        
+        # SORTING
+        order = list(list(0, 'desc')),  # Sort by Match Score descending
+        
+        # PERFORMANCE SETTINGS
+        deferRender = TRUE,
+        processing = TRUE
+      ),
+      rownames = FALSE,
+      class = 'table-hover table-striped compact',
+      style = 'bootstrap4'
+    ) %>%
+      # MATCH SCORE FORMATTING
+      formatStyle(
+        'Match Score',
+        backgroundColor = styleInterval(
+          cuts = c(1, 2, 3, 4, 5),
+          values = c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7', '#81c784', '#66bb6a')
+        ),
+        fontWeight = 'bold',
+        textAlign = 'center'
+      ) %>%
+      # ZONE COLUMNS FORMATTING
+      formatStyle(
+        c('Min Zone', 'Max Zone'),
+        textAlign = 'center',
+        fontWeight = '500'
+      )
+      
+  }, error = function(e) {
+    cat("Error in renderDataTable:", e$message, "\n")
+    empty_df <- data.frame("Error" = paste("Error loading data:", e$message))
+    return(datatable(empty_df, options = list(dom = 't', searching = FALSE),
+                    rownames = FALSE, colnames = ""))
   })
+})
 }
 
 ## execute the app
