@@ -2,8 +2,6 @@
 # Climate-Smart Plant Selection Application
 # ==============================================================================
 # Purpose: Interactive tool for selecting climate-resilient native plants
-# Author: [Your Name]
-# Date: [Current Date]
 # ==============================================================================
 
 # Load Required Libraries =====================================================
