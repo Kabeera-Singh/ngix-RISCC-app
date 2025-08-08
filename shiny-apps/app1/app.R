@@ -702,8 +702,8 @@ output$list <- DT::renderDataTable({
           # list(targets = 0, width = "90px", className = "dt-center"),   # Match Score
           # list(targets = 1, width = "200px"),                           # Scientific Name  
           # list(targets = 2, width = "180px"),                           # Common Name
-          # list(targets = 3, width = "80px", className = "dt-center"),   # Min Zone
-          # list(targets = 4, width = "80px", className = "dt-center"),   # Max Zone
+          list(targets = 3, width = "80px", className = "dt-center"),   # Min Zone
+          list(targets = 4, width = "80px", className = "dt-center"),   # Max Zone
           list(targets = "_all", width = "150px")                       # All other columns
         ),
         
@@ -719,11 +719,11 @@ output$list <- DT::renderDataTable({
         autoWidth = FALSE,
         searching = TRUE,
         lengthChange = TRUE,
-        info = TRUE,
+        info = FALSE,
         paging = TRUE,
         
         # SORTING
-        order = list(list(0, 'desc')),  # Sort by Match Score descending
+        order = list(list(0, 'desc'),list(1,'asc')),  # Sort by Match Score descending, then by Scientific Name ascending
         
         # PERFORMANCE SETTINGS
         deferRender = TRUE,
