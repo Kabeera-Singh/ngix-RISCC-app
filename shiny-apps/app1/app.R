@@ -24,9 +24,10 @@ print(paste("Available Files:", paste(list.files(), collapse = ", ")))
 
 # Constants and Configuration
 REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status")
-OPTIONAL_BONUS_CATEGORIES <- c("Hardiness Zones", "Propagation Keywords")
+OPTIONAL_BONUS_CATEGORIES <- c("Propagation Keywords")
 DEFAULT_PAGE_SIZE <- 20
 MAX_MATCH_SCORE <- 5
+DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")  # Always show these columns
 
 # State Abbreviation Mapping
 STATE_ABBREVIATIONS <- c(
@@ -140,12 +141,11 @@ extract_categorical_values <- function(data, column_name) {
   return(cleaned_values)
 }
 
-#' Create comprehensive filter options for all plant characteristics
+#' Create comprehensive filter options for all plant characteristics (excluding hardiness zones)
 #' @param plant_data Cleaned plant dataset
 #' @param filter_config Filter configuration
-#' @param hardiness_zones Available hardiness zones
 #' @return data.frame with all filter categories and their options
-create_filter_options <- function(plant_data, filter_config, hardiness_zones) {
+create_filter_options <- function(plant_data, filter_config) {
   cat("Creating filter options...\n")
   
   # Initialize filter options data frame
@@ -172,16 +172,6 @@ create_filter_options <- function(plant_data, filter_config, hardiness_zones) {
     }
   }
   
-  # Add hardiness zones as filterable option
-  if (length(hardiness_zones) > 0) {
-    filter_options <- rbind(filter_options, data.frame(
-      column_name = "Hardiness.Zones",
-      display_name = "Hardiness Zones",
-      available_values = paste(sort(hardiness_zones), collapse = ","),
-      stringsAsFactors = FALSE
-    ))
-  }
-  
   # Add propagation keywords
   propagation_values <- extract_categorical_values(plant_data, "propagation_keywords")
   if (length(propagation_values) > 0) {
@@ -193,8 +183,8 @@ create_filter_options <- function(plant_data, filter_config, hardiness_zones) {
     ))
   }
   
-  # Reorder: Growth Habit first, then Hardiness Zones, Climate Status, then others
-  priority_order <- c("Growth.Habit", "Hardiness.Zones", "Climate.Status")
+  # Reorder: Growth Habit first, then Climate Status, then others
+  priority_order <- c("Growth.Habit", "Climate.Status")
   priority_rows <- filter_options[filter_options$column_name %in% priority_order, ]
   other_rows <- filter_options[!filter_options$column_name %in% priority_order, ]
   
@@ -231,21 +221,7 @@ get_state_hardiness_zones <- function(state_name, hardiness_data) {
   return(zone_min:zone_max)
 }
 
-#' Get all possible hardiness zones from available states
-#' @param hardiness_data Hardiness zone dataset
-#' @return Sorted numeric vector of all hardiness zones
-get_all_hardiness_zones <- function(hardiness_data) {
-  all_zones <- numeric(0)
-  
-  for (state in AVAILABLE_STATES) {
-    state_zones <- get_state_hardiness_zones(state, hardiness_data)
-    all_zones <- c(all_zones, state_zones)
-  }
-  
-  return(sort(unique(all_zones)))
-}
-
-#' Create hierarchical tree structure for filter interface
+#' Create hierarchical tree structure for filter interface (excluding hardiness zones)
 #' @param filter_options Filter options data frame
 #' @return List structure for tree input widget
 create_filter_tree <- function(filter_options) {
@@ -333,14 +309,10 @@ hardiness_zones_data$state_full_name <- names(STATE_ABBREVIATIONS)[
 filter_configuration <- create_filter_configuration()
 cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
 
-# Get all available hardiness zones
-available_hardiness_zones <- get_all_hardiness_zones(hardiness_zones_data)
-
-# Create comprehensive filter options
+# Create comprehensive filter options (excluding hardiness zones)
 complete_filter_options <- create_filter_options(
   cleaned_plant_data, 
-  filter_configuration, 
-  available_hardiness_zones
+  filter_configuration
 )
 
 # Create tree structure for UI
@@ -406,8 +378,26 @@ ui <- fluidPage(
               selectInput(
                 inputId = "selected_state",
                 label = NULL,
-                choices = c("Select" = "", AVAILABLE_STATES),
+                choices = c(selected = NULL, AVAILABLE_STATES),
                 width = "100%"
+              )
+            ),
+            
+            # Hardiness Zone Range Slider
+            div(class = "form-group",
+              tags$label(`for` = "hardiness_zone_range",
+                tags$i(class = "fas fa-thermometer-half"), " Hardiness Zone Range"
+              ),
+              noUiSliderInput(
+                inputId = "hardiness_zone_range",
+                label = NULL,
+                min = 1, max = 12,
+                value = c(1, 12),
+                connect = TRUE,
+                step = 1,
+                tooltips = TRUE,
+                format = wNumbFormat(decimals = 0),
+                width = "95%"
               )
             ),
             
@@ -471,9 +461,37 @@ server <- function(input, output, session) {
                nrow(cleaned_plant_data), nrow(hardiness_zones_data), nrow(tree_node_mapping)))
   })
   
-  # Clear all filters
+  # Clear all filters (except state)
   observeEvent(input$clear_all_filters, {
-    updateTreeInput(session, "plant_characteristic_tree", selected = character(0))
+    tryCatch({
+      # Clear the tree selection using the correct syntax for shinyWidgets treeInput
+      updateTreeInput(
+        session = session, 
+        inputId = "plant_characteristic_tree", 
+        selected = character(0)
+      )
+      
+      # Reset hardiness zone range to full range
+      updateNoUiSliderInput(
+        session = session, 
+        inputId = "hardiness_zone_range", 
+        value = c(1, 12)
+      )
+      
+      cat("All filters cleared successfully\n")
+    }, error = function(e) {
+      cat(sprintf("Error clearing filters: %s\n", e$message))
+      # Try alternative approach if the above fails
+      tryCatch({
+        # Force refresh of the tree input
+        session$sendCustomMessage(type = "shinyWidgets-tree", message = list(
+          id = "plant_characteristic_tree",
+          selected = list()
+        ))
+      }, error = function(e2) {
+        cat(sprintf("Alternative clear method also failed: %s\n", e2$message))
+      })
+    })
   })
   
   # Main reactive function for filtered plant list
@@ -528,8 +546,8 @@ server <- function(input, output, session) {
         return(data.frame())
       }
       
-      # Apply hardiness zone filter if specified
-      filtered_plants <- apply_hardiness_zone_filter(filtered_plants, selected_criteria)
+      # Apply hardiness zone range filter
+      filtered_plants <- apply_hardiness_zone_range_filter(filtered_plants)
       
       # Calculate match scores for optional criteria
       filtered_plants <- calculate_match_scores(filtered_plants, selected_criteria)
@@ -549,7 +567,6 @@ server <- function(input, output, session) {
   # Parse selected filter criteria from tree input
   parse_selected_criteria <- function(selected_ids) {
     criteria_by_category <- list()
-    selected_hardiness_zones <- numeric(0)
     propagation_selected <- FALSE
     
     if (length(selected_ids) > 0 && nrow(tree_node_mapping) > 0) {
@@ -561,9 +578,7 @@ server <- function(input, output, session) {
           category <- as.character(node_info$category)
           value <- as.character(node_info$value)
           
-          if (category == "Hardiness Zones") {
-            selected_hardiness_zones <- c(selected_hardiness_zones, as.numeric(value))
-          } else if (category == "Propagation Keywords") {
+          if (category == "Propagation Keywords") {
             propagation_selected <- TRUE
           } else {
             if (is.null(criteria_by_category[[category]])) {
@@ -577,7 +592,6 @@ server <- function(input, output, session) {
     
     return(list(
       by_category = criteria_by_category,
-      hardiness_zones = selected_hardiness_zones,
       propagation_selected = propagation_selected
     ))
   }
@@ -600,17 +614,27 @@ server <- function(input, output, session) {
     return(filtered_data)
   }
   
-  # Apply hardiness zone filtering if selected
-  apply_hardiness_zone_filter <- function(plant_data, criteria) {
-    if (length(criteria$hardiness_zones) > 0) {
-      min_selected_zone <- min(criteria$hardiness_zones)
-      max_selected_zone <- max(criteria$hardiness_zones)
+  # Apply hardiness zone range filtering using slider values
+  apply_hardiness_zone_range_filter <- function(plant_data) {
+    zone_range <- input$hardiness_zone_range
+    
+    if (!is.null(zone_range) && length(zone_range) == 2) {
+      min_selected_zone <- zone_range[1]
+      max_selected_zone <- zone_range[2]
       
-      # Filter to plants that can survive in the selected zone range
-      plant_data <- plant_data[
-        plant_data$min_hardiness_zone <= max_selected_zone & 
-        plant_data$max_hardiness_zone >= min_selected_zone, 
-      ]
+      # Only filter if range is not the full range (1-12)
+      if (min_selected_zone != 1 || max_selected_zone != 12) {
+        # Filter to plants that can survive in the selected zone range
+        # Plant's low zone must be <= max selected zone
+        # Plant's high zone must be >= min selected zone
+        plant_data <- plant_data[
+          plant_data$min_hardiness_zone <= max_selected_zone & 
+          plant_data$max_hardiness_zone >= min_selected_zone, 
+        ]
+        
+        cat(sprintf("Applied hardiness zone filter: %d-%d, %d plants remain\n", 
+                   min_selected_zone, max_selected_zone, nrow(plant_data)))
+      }
     }
     
     return(plant_data)
@@ -635,11 +659,15 @@ server <- function(input, output, session) {
       }
     }
     
-    # Bonus points for special criteria
-    if (length(criteria$hardiness_zones) > 0) {
-      plant_data$match_score <- plant_data$match_score + 1
+    # Bonus points for hardiness zone range selection (if not full range)
+    zone_range <- input$hardiness_zone_range
+    if (!is.null(zone_range) && length(zone_range) == 2) {
+      if (zone_range[1] != 1 || zone_range[2] != 12) {
+        plant_data$match_score <- plant_data$match_score + 1
+      }
     }
     
+    # Bonus points for propagation selection
     if (criteria$propagation_selected) {
       plant_data$match_score <- plant_data$match_score + 1
     }
@@ -744,6 +772,15 @@ server <- function(input, output, session) {
       }
     }
     
+    # Always add default columns (Sun Level, Moisture Level) at the end
+    for (default_category in DEFAULT_COLUMNS) {
+      column_name <- get_column_name_for_category(default_category)
+      if (!is.null(column_name) && column_name %in% names(plant_data) && 
+          !default_category %in% names(results)) {
+        results[[default_category]] <- plant_data[[column_name]]
+      }
+    }
+    
     # Add propagation information if selected
     if (criteria$propagation_selected && "propagation_methods" %in% names(plant_data)) {
       results[["Propagation Description"]] <- plant_data$propagation_methods
@@ -815,7 +852,7 @@ server <- function(input, output, session) {
           searching = TRUE,
           lengthChange = TRUE,
           info = FALSE,
-          paging = TRUE,
+          paging = FALSE,
           
           # Default sorting: Match Score descending, then Scientific Name ascending
           order = list(list(0, 'desc'), list(1, 'asc')),
