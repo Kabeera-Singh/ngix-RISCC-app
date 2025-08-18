@@ -1,35 +1,24 @@
 # ==============================================================================
 # Climate-Smart Plant Selection Application
 # ==============================================================================
-# Purpose: Interactive tool for selecting climate-resilient native plants
-# ==============================================================================
 
 # Load Required Libraries =====================================================
 library(tidyverse)
 library(shiny)
 library(shinyWidgets)
 library(DT)
-library(stringr)
-library(readxl)
 library(shinyjs)
-library(rrapply)
 library(data.table)
-library(bslib)
-library(shinydashboard)
 
 # Global Configuration ========================================================
 print("Initializing Climate-Smart Plant Selection Application...")
-print(paste("Working Directory:", getwd()))
-print(paste("Available Files:", paste(list.files(), collapse = ", ")))
 
-# Constants and Configuration
+# Constants
 REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status")
-OPTIONAL_BONUS_CATEGORIES <- c("Propagation Keywords")
 DEFAULT_PAGE_SIZE <- 20
 MAX_MATCH_SCORE <- 5
-DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")  # Always show these columns
+DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
 
-# State Abbreviation Mapping
 STATE_ABBREVIATIONS <- c(
   "New York" = "NY", "Connecticut" = "CT", "Rhode Island" = "RI",
   "Massachusetts" = "MA", "New Hampshire" = "NH", "Vermont" = "VT",
@@ -39,38 +28,20 @@ STATE_ABBREVIATIONS <- c(
   "Kentucky" = "KY"
 )
 
-# Available States (sorted for UI)
 AVAILABLE_STATES <- names(STATE_ABBREVIATIONS)
 
 # Data Loading and Preprocessing ==============================================
-
-#' Load and validate required data files
-#' @return list containing loaded datasets
 load_application_data <- function() {
   cat("Loading application data...\n")
-  
-  # Load datasets with error handling
   tryCatch({
-    hardiness_zones_by_state <- read.csv("data/state.hz.csv")
-    zipcode_reference <- read.csv("data/zipcodes.csv")
-    plant_database <- read.csv("data/ClimateSmart_Data.csv")
-    
-    cat("Data loading completed successfully\n")
-    cat(sprintf("- Hardiness zones: %d records\n", nrow(hardiness_zones_by_state)))
-    cat(sprintf("- Plant database: %d records\n", nrow(plant_database)))
-    
-    return(list(
-      hardiness_zones = hardiness_zones_by_state,
-      zipcodes = zipcode_reference,
-      plants = plant_database
-    ))
-  }, error = function(e) {
-    stop(paste("Failed to load data files:", e$message))
-  })
+    list(
+      hardiness_zones = read.csv("data/state.hz.csv"),
+      zipcodes = read.csv("data/zipcodes.csv"),
+      plants = read.csv("data/ClimateSmart_Data.csv")
+    )
+  }, error = function(e) stop(paste("Failed to load data files:", e$message)))
 }
 
-#' Create filter configuration for plant characteristics
-#' @return data.frame with column mappings and display names
 create_filter_configuration <- function() {
   data.frame(
     column_name = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", 
@@ -81,28 +52,19 @@ create_filter_configuration <- function() {
                     "Bloom Period", "Color", "Interesting Foliage", "Showy", 
                     "Garden Aggressive", "Wildlife Services", "Pollinators", 
                     "Climate Status"),
-    is_filterable = rep(TRUE, 12),
     stringsAsFactors = FALSE
   )
 }
 
-#' Clean and standardize plant database
-#' @param raw_plant_data Raw plant dataset
-#' @param filter_config Filter configuration
-#' @return Cleaned and standardized plant dataset
 clean_plant_database <- function(raw_plant_data, filter_config) {
   cat("Cleaning plant database...\n")
   
-  # Select and rename columns for consistency
-  cleaned_plants <- raw_plant_data %>%
+  raw_plant_data %>%
     select(Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
            all_of(filter_config$column_name), Propagation.Methods, 
            Propagation.Keywords, Climate.Status) %>%
-    # Remove records with missing hardiness zone information
     filter(!is.na(Hardiness.Zone.Low) & !is.na(Hardiness.Zone.High)) %>%
-    # Remove duplicate scientific names
     distinct(Scientific.Name, .keep_all = TRUE) %>%
-    # Standardize column names for internal consistency
     rename(
       scientific_name = Scientific.Name,
       common_name = Common.Name,
@@ -111,196 +73,76 @@ clean_plant_database <- function(raw_plant_data, filter_config) {
       propagation_methods = Propagation.Methods,
       propagation_keywords = Propagation.Keywords
     ) %>%
-    # Initialize match criteria score
     mutate(match_score = 0)
-  
-  cat(sprintf("Plant database cleaned: %d records retained\n", nrow(cleaned_plants)))
-  return(cleaned_plants)
 }
 
-#' Extract and clean unique values from categorical columns
-#' @param data Dataset to process
-#' @param column_name Name of column to extract values from
-#' @return Character vector of cleaned unique values
+# Unified ordering function with switch statement
+order_by_preference <- function(values, preferred_order) {
+  matched_values <- preferred_order[preferred_order %in% values]
+  unmatched_values <- sort(values[!values %in% preferred_order])
+  c(matched_values, unmatched_values)
+}
+
+apply_custom_ordering <- function(values, category) {
+  if (length(values) == 0) return(values)
+  
+  clean_values <- unique(values[!is.na(values) & values != "" & values != "NA"])
+  if (length(clean_values) == 0) return(character(0))
+  
+  preferred_order <- switch(category,
+    "Growth Habit" = c("Annual", "Perennial Herb", "Grass", "Fern", "Vine", "Shrub", "Tree", "Other"),
+    "Sun Level" = c("Full Sun", "Part Shade", "Full Shade", "Not Specified"),
+    "Moisture Level" = c("Dry", "Medium", "Moist", "Wet", "Not Specified"),
+    "Soil Type" = c("Sandy", "Loam", "Clay", "Well-drained", "Moist", "Other", "Not Specified"),
+    "Bloom Period" = c("January", "February", "March", "April", "May", "June",
+                      "July", "August", "September", "October", "November", "December",
+                      "Indeterminate", "Non-flowering", "Rarely Flowers"),
+    "Color" = c("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
+               "Pink", "Brown", "White", "Not Applicable"),
+    "Wildlife Services" = c("Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "None"),
+    # Default ordering
+    {
+      special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
+      regular_values <- sort(clean_values[!clean_values %in% special_endings])
+      special_values <- clean_values[clean_values %in% special_endings]
+      special_sorted <- special_values[order(match(special_values, special_endings))]
+      return(c(regular_values, special_sorted))
+    }
+  )
+  
+  order_by_preference(clean_values, preferred_order)
+}
+
 extract_categorical_values <- function(data, column_name) {
   if (!column_name %in% names(data)) return(character(0))
   
-  # Extract all values, split by common delimiters, clean, and deduplicate
-  raw_values <- data[[column_name]]
-  all_values <- unlist(strsplit(paste(raw_values, collapse = ","), "[,;/]"))
-  
-  # Clean and filter values
+  all_values <- unlist(strsplit(paste(data[[column_name]], collapse = ","), "[,;/]"))
   cleaned_values <- all_values %>%
     str_trim() %>%
     .[. != "" & !is.na(.) & . != "NA"] %>%
     unique()
   
-  # Determine category for ordering
   category <- get_display_name_for_column(column_name)
-  
-  # Apply custom ordering
-  ordered_values <- apply_custom_ordering(cleaned_values, category)
-  
-  return(ordered_values)
+  apply_custom_ordering(cleaned_values, category)
 }
 
-
-#' Custom ordering function for categorical values
-#' @param values Character vector of values to order
-#' @param category Category name to determine ordering logic
-#' @return Ordered character vector
-apply_custom_ordering <- function(values, category) {
-  if (length(values) == 0) return(values)
-  
-  # Remove duplicates and NA values
-  clean_values <- unique(values[!is.na(values) & values != "" & values != "NA"])
-  
-  if (length(clean_values) == 0) return(character(0))
-  
-  # Apply category-specific ordering
-  ordered_values <- switch(category,
-    "Growth Habit" = order_growth_habit(clean_values),
-    "Sun Level" = order_sun_level(clean_values),
-    "Moisture Level" = order_moisture_level(clean_values),
-    "Soil Type" = order_soil_type(clean_values),
-    "Bloom Period" = order_bloom_period(clean_values),
-    "Color" = order_color(clean_values),
-    "Wildlife Services" = order_wildlife_services(clean_values),
-    # Default: alphabetical with special values at end
-    order_default(clean_values)
-  )
-  
-  return(ordered_values)
-}
-
-#' Order Growth Habit values logically
-order_growth_habit <- function(values) {
-  preferred_order <- c(
-    "Annual", "Perennial Herb", "Grass", "Fern", "Vine",
-    "Shrub", "Tree", "Other"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Sun Level from most to least sun
-order_sun_level <- function(values) {
-  preferred_order <- c(
-    "Full Sun", "Part Shade", "Full Shade", "Not Specified"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Moisture Level from driest to wettest
-order_moisture_level <- function(values) {
-  preferred_order <- c(
-    "Dry", "Medium", "Moist", "Wet", "Not Specified"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Soil Type logically
-order_soil_type <- function(values) {
-  preferred_order <- c(
-    "Sandy", "Loam", "Clay", "Well-drained", "Moist", "Other", "Not Specified"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Bloom Period chronologically
-order_bloom_period <- function(values) {
-  preferred_order <- c(
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December",
-    "Indeterminate", "Non-flowering", "Rarely Flowers"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Color by spectrum
-order_color <- function(values) {
-  preferred_order <- c(
-    "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
-    "Pink", "Brown", "White", "Not Applicable"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Order Wildlife Services by animal type
-order_wildlife_services <- function(values) {
-  preferred_order <- c(
-    "Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "None"
-  )
-  
-  return(order_by_preference(values, preferred_order))
-}
-
-#' Default ordering: alphabetical with special values at end
-order_default <- function(values) {
-  special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
-  
-  # Separate special values from regular values
-  regular_values <- values[!values %in% special_endings]
-  special_values <- values[values %in% special_endings]
-  
-  # Sort regular values alphabetically
-  regular_sorted <- sort(regular_values)
-  
-  # Order special values by preference
-  special_sorted <- special_values[order(match(special_values, special_endings))]
-  
-  return(c(regular_sorted, special_sorted))
-}
-
-#' Helper function to order values by preferred sequence
-order_by_preference <- function(values, preferred_order) {
-  # Find values that match the preferred order
-  matched_values <- preferred_order[preferred_order %in% values]
-  
-  # Find values not in preferred order (sort alphabetically)
-  unmatched_values <- sort(values[!values %in% preferred_order])
-  
-  return(c(matched_values, unmatched_values))
-}
-
-# Helper function to get display name from column name
 get_display_name_for_column <- function(column_name) {
   display_mapping <- c(
-    "Growth.Habit" = "Growth Habit",
-    "Sun.Level" = "Sun Level",
-    "Moisture.Level" = "Moisture Level",
-    "Soil.Type" = "Soil Type",
-    "Bloom.Period" = "Bloom Period",
-    "Color" = "Color",
-    "Interesting.Foliage" = "Interesting Foliage",
-    "Showy" = "Showy",
-    "Garden.Aggressive" = "Garden Aggressive",
-    "Wildlife.Services" = "Wildlife Services",
-    "Pollinators" = "Pollinators",
-    "Climate.Status" = "Climate Status",
+    "Growth.Habit" = "Growth Habit", "Sun.Level" = "Sun Level",
+    "Moisture.Level" = "Moisture Level", "Soil.Type" = "Soil Type",
+    "Bloom.Period" = "Bloom Period", "Color" = "Color",
+    "Interesting.Foliage" = "Interesting Foliage", "Showy" = "Showy",
+    "Garden.Aggressive" = "Garden Aggressive", "Wildlife.Services" = "Wildlife Services",
+    "Pollinators" = "Pollinators", "Climate.Status" = "Climate Status",
     "propagation_keywords" = "Propagation Keywords"
   )
   
-  if (column_name %in% names(display_mapping)) {
-    return(display_mapping[column_name])
-  }
-  
-  return(column_name)
+  ifelse(column_name %in% names(display_mapping), display_mapping[column_name], column_name)
 }
 
-#' Create comprehensive filter options for all plant characteristics (excluding hardiness zones)
-#' @param plant_data Cleaned plant dataset
-#' @param filter_config Filter configuration
-#' @return data.frame with all filter categories and their options
 create_filter_options <- function(plant_data, filter_config) {
   cat("Creating filter options...\n")
   
-  # Initialize filter options data frame
   filter_options <- data.frame(
     column_name = character(0),
     display_name = character(0),
@@ -308,74 +150,33 @@ create_filter_options <- function(plant_data, filter_config) {
     stringsAsFactors = FALSE
   )
   
-  # Process standard plant characteristics
-  for (i in seq_len(nrow(filter_config))) {
-    col_name <- filter_config$column_name[i]
-    display_name <- filter_config$display_name[i]
-    
-    values <- extract_categorical_values(plant_data, col_name)
+  # Process all columns
+  all_columns <- c(filter_config$column_name, "propagation_keywords")
+  all_display_names <- c(filter_config$display_name, "Propagation Keywords")
+  
+  for (i in seq_along(all_columns)) {
+    values <- extract_categorical_values(plant_data, all_columns[i])
     if (length(values) > 0) {
       filter_options <- rbind(filter_options, data.frame(
-        column_name = col_name,
-        display_name = display_name,
+        column_name = all_columns[i],
+        display_name = all_display_names[i],
         available_values = paste(values, collapse = ","),
         stringsAsFactors = FALSE
       ))
     }
   }
   
-  # Add propagation keywords
-  propagation_values <- extract_categorical_values(plant_data, "propagation_keywords")
-  if (length(propagation_values) > 0) {
-    filter_options <- rbind(filter_options, data.frame(
-      column_name = "propagation_keywords",
-      display_name = "Propagation Keywords",
-      available_values = paste(propagation_values, collapse = ","),
-      stringsAsFactors = FALSE
-    ))
-  }
-  
-  # Reorder: Growth Habit first, then Climate Status, then others
+  # Reorder with priorities first
   priority_order <- c("Growth.Habit", "Climate.Status")
   priority_rows <- filter_options[filter_options$column_name %in% priority_order, ]
   other_rows <- filter_options[!filter_options$column_name %in% priority_order, ]
   
-  # Sort priority rows by desired order
   priority_rows <- priority_rows[match(priority_order, priority_rows$column_name), ]
   priority_rows <- priority_rows[!is.na(priority_rows$column_name), ]
   
-  final_options <- rbind(priority_rows, other_rows)
-  
-  cat(sprintf("Filter options created: %d categories\n", nrow(final_options)))
-  return(final_options)
+  rbind(priority_rows, other_rows)
 }
 
-#' Get hardiness zones for a specific state
-#' @param state_name Full state name
-#' @param hardiness_data Hardiness zone dataset
-#' @return Numeric vector of available hardiness zones
-get_state_hardiness_zones <- function(state_name, hardiness_data) {
-  if (!state_name %in% names(STATE_ABBREVIATIONS)) return(numeric(0))
-  
-  state_abbrev <- STATE_ABBREVIATIONS[state_name]
-  current_conditions <- hardiness_data[
-    hardiness_data$State == state_abbrev & 
-    hardiness_data$Time_Period == "CurrentConditions", 
-  ]
-  
-  if (nrow(current_conditions) == 0) return(numeric(0))
-  
-  zone_min <- current_conditions$Zone.Min[1]
-  zone_max <- current_conditions$Zone.Max[1]
-  
-  if (is.na(zone_min) || is.na(zone_max)) return(numeric(0))
-  
-  return(zone_min:zone_max)
-}
-
-#' Create hierarchical tree structure for filter interface (excluding hardiness zones)
-#' @param filter_options Filter options data frame
-#' @return List structure for tree input widget
 create_filter_tree <- function(filter_options) {
   cat("Creating filter tree structure...\n")
   
@@ -384,40 +185,26 @@ create_filter_tree <- function(filter_options) {
   
   for (i in seq_len(nrow(filter_options))) {
     category <- filter_options$display_name[i]
-    values <- strsplit(filter_options$available_values[i], ",")[[1]]
-    values <- str_trim(values)
+    values <- str_trim(strsplit(filter_options$available_values[i], ",")[[1]])
     values <- values[values != "" & !is.na(values)]
     
     if (length(values) == 0) next
     
-    # Create category node
     category_node <- list(
       text = category,
       id = paste0("category_", node_id_counter),
-      children = list()
+      children = lapply(values, function(value) {
+        node_id_counter <<- node_id_counter + 1
+        list(text = value, id = paste0("item_", node_id_counter))
+      })
     )
     node_id_counter <- node_id_counter + 1
-    
-    # Add child nodes for each value
-    for (value in values) {
-      child_node <- list(
-        text = value,
-        id = paste0("item_", node_id_counter)
-      )
-      category_node$children <- append(category_node$children, list(child_node))
-      node_id_counter <- node_id_counter + 1
-    }
-    
     tree_structure <- append(tree_structure, list(category_node))
   }
   
-  cat(sprintf("Filter tree created with %d categories\n", length(tree_structure)))
-  return(tree_structure)
+  tree_structure
 }
 
-#' Create mapping between tree node IDs and their corresponding values
-#' @param tree_structure Tree structure from create_filter_tree
-#' @return data.frame mapping node IDs to categories and values
 create_tree_mapping <- function(tree_structure) {
   mapping <- data.frame(
     node_id = character(0),
@@ -427,13 +214,11 @@ create_tree_mapping <- function(tree_structure) {
   )
   
   for (category_node in tree_structure) {
-    category_name <- category_node$text
-    
     if (!is.null(category_node$children)) {
       for (child_node in category_node$children) {
         mapping <- rbind(mapping, data.frame(
           node_id = child_node$id,
-          category = category_name,
+          category = category_node$text,
           value = child_node$text,
           stringsAsFactors = FALSE
         ))
@@ -441,33 +226,21 @@ create_tree_mapping <- function(tree_structure) {
     }
   }
   
-  return(mapping)
+  mapping
 }
 
 # Initialize Application Data =================================================
-cat("Initializing application data...\n")
-
-# Load all required data
 app_data <- load_application_data()
 hardiness_zones_data <- app_data$hardiness_zones
 plant_data_raw <- app_data$plants
 
-# Add state full names to hardiness zones data
 hardiness_zones_data$state_full_name <- names(STATE_ABBREVIATIONS)[
   match(hardiness_zones_data$State, STATE_ABBREVIATIONS)
 ]
 
-# Create filter configuration and clean plant data
 filter_configuration <- create_filter_configuration()
 cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
-
-# Create comprehensive filter options (excluding hardiness zones)
-complete_filter_options <- create_filter_options(
-  cleaned_plant_data, 
-  filter_configuration
-)
-
-# Create tree structure for UI
+complete_filter_options <- create_filter_options(cleaned_plant_data, filter_configuration)
 filter_tree_structure <- create_filter_tree(complete_filter_options)
 tree_node_mapping <- create_tree_mapping(filter_tree_structure)
 
@@ -475,7 +248,6 @@ cat("Application initialization completed successfully!\n")
 
 # User Interface Definition ===================================================
 ui <- fluidPage(
-  # External resources
   tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
     tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
@@ -485,10 +257,8 @@ ui <- fluidPage(
     )
   ),
   
-  # Enable JavaScript functionality
   useShinyjs(),
   
-  # Application header
   div(class = "app-header",
     div(class = "header-container",
       h1("Climate-Smart Plant Selection"),
@@ -498,86 +268,56 @@ ui <- fluidPage(
     )
   ),
   
-  # Main application container
   div(class = "main-container",
-    # Information card
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
       p(paste(
         "Select your state and desired site and plant characteristics below.",
         "The tool will generate a list of native and near-native plants likely",
-        "to survive both current and future climate conditions. The plant list",
-        "will be sorted based on a best match with the selection criteria you input.",
-        "Plants with a higher match score meet more of your selection criteria.",
-        "If you select five criteria, a plant with a match score of 5 is a perfect match."
+        "to survive both current and future climate conditions."
       ))
     ),
     
-    # Main layout with sidebar and results panel
     div(class = "main-layout",
-      # Filter sidebar
       div(class = "sidebar",
         div(class = "filter-card",
           div(class = "filter-header",
             h5(tags$i(class = "fas fa-filter"), " Filter Options")
           ),
           div(class = "filter-body",
-            # State selection
             div(class = "form-group",
               tags$label(`for` = "selected_state",
                 tags$i(class = "fas fa-map-marker-alt"), " Choose your state"
               ),
-              selectInput(
-                inputId = "selected_state",
-                label = NULL,
-                choices = c(selected = NULL, AVAILABLE_STATES),
-                width = "100%"
-              )
+              selectInput("selected_state", label = NULL,
+                choices = c(selected = NULL, AVAILABLE_STATES), width = "100%")
             ),
             
-            # Hardiness Zone Range Slider
             div(class = "form-group",
               tags$label(`for` = "hardiness_zone_range",
                 tags$i(class = "fas fa-thermometer-half"), " Hardiness Zone Range"
               ),
-              noUiSliderInput(
-                inputId = "hardiness_zone_range",
-                label = NULL,
-                min = 1, max = 12,
-                value = c(1, 12),
-                connect = TRUE,
-                step = 1,
-                tooltips = TRUE,
-                format = wNumbFormat(decimals = 0),
-                width = "95%"
-              )
+              noUiSliderInput("hardiness_zone_range", label = NULL,
+                min = 1, max = 12, value = c(1, 12), connect = TRUE, step = 1,
+                tooltips = TRUE, format = wNumbFormat(decimals = 0), width = "95%")
             ),
             
-            # Plant characteristics section
             div(class = "characteristics-section",
               div(class = "characteristics-header",
                 h6(class = "characteristics-title",
                   tags$i(class = "fas fa-seedling"), " Plant Characteristics"
                 ),
                 actionButton("clear_all_filters", "Clear All", 
-                           class = "btn-clear", 
-                           style = "margin-left: auto;")
+                           class = "btn-clear", style = "margin-left: auto;")
               ),
               
-              # Hierarchical filter tree
-              treeInput(
-                "plant_characteristic_tree",
-                label = NULL,
-                choices = filter_tree_structure,
-                returnValue = "id",
-                closeDepth = 0  # Start with all categories collapsed
-              )
+              treeInput("plant_characteristic_tree", label = NULL,
+                choices = filter_tree_structure, returnValue = "id", closeDepth = 0)
             )
           )
         )
       ),
       
-      # Results panel
       div(class = "main-panel",
         div(class = "results-card",
           div(class = "results-header",
@@ -587,7 +327,6 @@ ui <- fluidPage(
             )
           ),
           
-          # Results data table
           div(class = "table-container",
             DT::dataTableOutput("plant_results_table")
           )
@@ -596,10 +335,9 @@ ui <- fluidPage(
     )
   ),
   
-  # Application footer
   tags$footer(class = "app-footer",
     div(class = "footer-container",
-      p("Climate Resilient Plants Database - Helping you choose plants for future climate conditions")
+      p("Climate Resilient Plants Database")
     )
   )
 )
@@ -607,116 +345,16 @@ ui <- fluidPage(
 # Server Logic =================================================================
 server <- function(input, output, session) {
   
-  # Debugging information
-  observe({
-    cat(sprintf("Application Status - Plants: %d, Hardiness Zones: %d, Tree Mapping: %d\n",
-               nrow(cleaned_plant_data), nrow(hardiness_zones_data), nrow(tree_node_mapping)))
-  })
-  
-  # Clear all filters (except state)
   observeEvent(input$clear_all_filters, {
     tryCatch({
-      # Clear the tree selection using the correct syntax for shinyWidgets treeInput
-      updateTreeInput(
-        session = session, 
-        inputId = "plant_characteristic_tree", 
-        selected = character(0)
-      )
-      
-      # Reset hardiness zone range to full range
-      updateNoUiSliderInput(
-        session = session, 
-        inputId = "hardiness_zone_range", 
-        value = c(1, 12)
-      )
-      
-      cat("All filters cleared successfully\n")
-    }, error = function(e) {
-      cat(sprintf("Error clearing filters: %s\n", e$message))
-      # Try alternative approach if the above fails
-      tryCatch({
-        # Force refresh of the tree input
-        session$sendCustomMessage(type = "shinyWidgets-tree", message = list(
-          id = "plant_characteristic_tree",
-          selected = list()
-        ))
-      }, error = function(e2) {
-        cat(sprintf("Alternative clear method also failed: %s\n", e2$message))
-      })
-    })
+      updateTreeInput(session = session, inputId = "plant_characteristic_tree", 
+                     selected = character(0))
+      updateNoUiSliderInput(session = session, inputId = "hardiness_zone_range", 
+                           value = c(1, 12))
+    }, error = function(e) cat(sprintf("Error clearing filters: %s\n", e$message)))
   })
   
-  # Main reactive function for filtered plant list
-  filtered_plant_list <- reactive({
-    # Require state selection
-    req(input$selected_state)
-    
-    tryCatch({
-      cat(sprintf("Filtering plants for state: %s\n", input$selected_state))
-      
-      # Get state-specific hardiness zone constraints for future climate conditions
-      state_abbreviation <- STATE_ABBREVIATIONS[input$selected_state]
-      future_climate_data <- hardiness_zones_data[
-        hardiness_zones_data$State == state_abbreviation & 
-        hardiness_zones_data$Time_Period == "FutureWorst", 
-      ]
-      
-      if (nrow(future_climate_data) == 0) {
-        cat(sprintf("No future climate data found for %s\n", input$selected_state))
-        return(data.frame())
-      }
-      
-      # Extract hardiness zone constraints
-      state_min_zone <- future_climate_data$Zone.Min[1]
-      state_max_zone <- future_climate_data$Zone.Max[1]
-      
-      # Filter plants by state hardiness zones (plants must survive future climate)
-      climate_suitable_plants <- cleaned_plant_data[
-        cleaned_plant_data$max_hardiness_zone >= state_min_zone & 
-        cleaned_plant_data$min_hardiness_zone <= state_max_zone, 
-      ]
-      
-      if (nrow(climate_suitable_plants) == 0) {
-        cat("No plants suitable for future climate conditions\n")
-        return(data.frame())
-      }
-      
-      # Process user-selected filter criteria
-      selected_filter_ids <- input$plant_characteristic_tree
-      if (is.null(selected_filter_ids)) {
-        selected_filter_ids <- character(0)
-      }
-      
-      # Parse selected criteria into categories
-      selected_criteria <- parse_selected_criteria(selected_filter_ids)
-      
-      # Apply required filters (Growth Habit and Climate Status)
-      filtered_plants <- apply_required_filters(climate_suitable_plants, selected_criteria)
-      
-      if (nrow(filtered_plants) == 0) {
-        cat("No plants match required criteria\n")
-        return(data.frame())
-      }
-      
-      # Apply hardiness zone range filter
-      filtered_plants <- apply_hardiness_zone_range_filter(filtered_plants)
-      
-      # Calculate match scores for optional criteria
-      filtered_plants <- calculate_match_scores(filtered_plants, selected_criteria)
-      
-      # Prepare output data table
-      results_table <- prepare_results_table(filtered_plants, selected_criteria)
-      
-      cat(sprintf("Filtering completed: %d plants found\n", nrow(results_table)))
-      return(results_table)
-      
-    }, error = function(e) {
-      cat(sprintf("Error in filtered_plant_list: %s\n", e$message))
-      return(data.frame())
-    })
-  })
-  
-  # Parse selected filter criteria from tree input
+  # Unified helper functions
   parse_selected_criteria <- function(selected_ids) {
     criteria_by_category <- list()
     propagation_selected <- FALSE
@@ -733,135 +371,26 @@ server <- function(input, output, session) {
           if (category == "Propagation Keywords") {
             propagation_selected <- TRUE
           } else {
-            if (is.null(criteria_by_category[[category]])) {
-              criteria_by_category[[category]] <- character(0)
-            }
             criteria_by_category[[category]] <- c(criteria_by_category[[category]], value)
           }
         }
       }
     }
     
-    return(list(
-      by_category = criteria_by_category,
-      propagation_selected = propagation_selected
-    ))
+    list(by_category = criteria_by_category, propagation_selected = propagation_selected)
   }
   
-  # Apply required filters (Growth Habit and Climate Status)
-  apply_required_filters <- function(plant_data, criteria) {
-    filtered_data <- plant_data
-    
-    for (required_category in REQUIRED_FILTER_CATEGORIES) {
-      if (required_category %in% names(criteria$by_category)) {
-        category_values <- criteria$by_category[[required_category]]
-        column_name <- get_column_name_for_category(required_category)
-        
-        if (!is.null(column_name) && column_name %in% names(filtered_data)) {
-          filtered_data <- filter_by_category_values(filtered_data, column_name, category_values)
-        }
-      }
-    }
-    
-    return(filtered_data)
-  }
-  
-  # Apply hardiness zone range filtering using slider values
-  apply_hardiness_zone_range_filter <- function(plant_data) {
-    zone_range <- input$hardiness_zone_range
-    
-    if (!is.null(zone_range) && length(zone_range) == 2) {
-      min_selected_zone <- zone_range[1]
-      max_selected_zone <- zone_range[2]
-      
-      # Only filter if range is not the full range (1-12)
-      if (min_selected_zone != 1 || max_selected_zone != 12) {
-        # Filter to plants that can survive in the selected zone range
-        # Plant's low zone must be <= max selected zone
-        # Plant's high zone must be >= min selected zone
-        plant_data <- plant_data[
-          plant_data$min_hardiness_zone <= max_selected_zone & 
-          plant_data$max_hardiness_zone >= min_selected_zone, 
-        ]
-        
-        cat(sprintf("Applied hardiness zone filter: %d-%d, %d plants remain\n", 
-                   min_selected_zone, max_selected_zone, nrow(plant_data)))
-      }
-    }
-    
-    return(plant_data)
-  }
-  
-  # Calculate match scores for optional criteria
-  calculate_match_scores <- function(plant_data, criteria) {
-    plant_data$match_score <- 0
-    
-    # Score optional plant characteristics
-    optional_categories <- names(criteria$by_category)[
-      !names(criteria$by_category) %in% REQUIRED_FILTER_CATEGORIES
-    ]
-    
-    for (category in optional_categories) {
-      category_values <- criteria$by_category[[category]]
-      column_name <- get_column_name_for_category(category)
-      
-      if (!is.null(column_name) && column_name %in% names(plant_data)) {
-        matches <- check_category_matches(plant_data, column_name, category_values)
-        plant_data$match_score[matches] <- plant_data$match_score[matches] + 1
-      }
-    }
-    
-    # Bonus points for hardiness zone range selection (if not full range)
-    zone_range <- input$hardiness_zone_range
-    if (!is.null(zone_range) && length(zone_range) == 2) {
-      if (zone_range[1] != 1 || zone_range[2] != 12) {
-        plant_data$match_score <- plant_data$match_score + 1
-      }
-    }
-    
-    # Bonus points for propagation selection
-    if (criteria$propagation_selected) {
-      plant_data$match_score <- plant_data$match_score + 1
-    }
-    
-    return(plant_data)
-  }
-  
-  # Get database column name for display category
   get_column_name_for_category <- function(category) {
-    if (category == "Growth Habit") return("Growth.Habit")
-    if (category == "Climate Status") return("Climate.Status")
+    column_mapping <- c("Growth Habit" = "Growth.Habit", "Climate Status" = "Climate.Status")
+    if (category %in% names(column_mapping)) return(column_mapping[category])
     
-    # Look up in filter configuration
     matching_config <- filter_configuration[filter_configuration$display_name == category, ]
-    if (nrow(matching_config) > 0) {
-      return(matching_config$column_name[1])
-    }
-    
-    return(NULL)
+    if (nrow(matching_config) > 0) return(matching_config$column_name[1])
+    NULL
   }
   
-  # Filter plants by category values using optimized string matching
-  filter_by_category_values <- function(plant_data, column_name, target_values) {
-    if (length(target_values) == 0 || !column_name %in% names(plant_data)) {
-      return(plant_data)
-    }
-    
-    category_matches <- rep(FALSE, nrow(plant_data))
-    
-    for (target_value in target_values) {
-      matches <- check_category_matches(plant_data, column_name, target_value)
-      category_matches <- category_matches | matches
-    }
-    
-    return(plant_data[category_matches, ])
-  }
-  
-  # Check for matches in a category column using efficient string matching
   check_category_matches <- function(plant_data, column_name, target_values) {
-    if (!column_name %in% names(plant_data)) {
-      return(rep(FALSE, nrow(plant_data)))
-    }
+    if (!column_name %in% names(plant_data)) return(rep(FALSE, nrow(plant_data)))
     
     column_values <- as.character(plant_data[[column_name]])
     column_values[is.na(column_values)] <- ""
@@ -871,14 +400,10 @@ server <- function(input, output, session) {
     for (target_value in target_values) {
       if (is.na(target_value) || target_value == "") next
       
-      # Escape special regex characters for exact matching
       escaped_target <- gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", target_value)
-      
-      # Try exact word boundary matching first
       exact_matches <- grepl(paste0("\\b", escaped_target, "\\b"), 
                            column_values, ignore.case = TRUE)
       
-      # If no exact matches, try substring matching
       if (!any(exact_matches, na.rm = TRUE)) {
         substring_matches <- grepl(escaped_target, column_values, ignore.case = TRUE)
         all_matches <- all_matches | substring_matches
@@ -887,129 +412,188 @@ server <- function(input, output, session) {
       }
     }
     
-    return(all_matches)
+    all_matches
   }
   
-  # Prepare final results table for display
-  prepare_results_table <- function(plant_data, criteria) {
-    # Start with basic columns
-    results <- data.frame(
-      "Match Score" = plant_data$match_score,
-      "Scientific Name" = plant_data$scientific_name,
-      "Common Name" = plant_data$common_name,
-      "Min Zone" = plant_data$min_hardiness_zone,
-      "Max Zone" = plant_data$max_hardiness_zone,
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-    
-    # Add columns for selected characteristics
-    selected_categories <- names(criteria$by_category)
-    
-    # Always include Growth Habit and Climate Status if they exist
-    priority_categories <- c("Growth Habit", "Climate Status")
-    for (category in priority_categories) {
-      column_name <- get_column_name_for_category(category)
-      if (!is.null(column_name) && column_name %in% names(plant_data)) {
-        results[[category]] <- plant_data[[column_name]]
-      }
+  filter_by_category_values <- function(plant_data, column_name, target_values) {
+    if (length(target_values) == 0 || !column_name %in% names(plant_data)) {
+      return(plant_data)
     }
     
-    # Add other selected characteristic columns
-    other_categories <- selected_categories[!selected_categories %in% priority_categories]
-    for (category in other_categories) {
-      column_name <- get_column_name_for_category(category)
-      if (!is.null(column_name) && column_name %in% names(plant_data)) {
-        results[[category]] <- plant_data[[column_name]]
-      }
+    category_matches <- rep(FALSE, nrow(plant_data))
+    for (target_value in target_values) {
+      matches <- check_category_matches(plant_data, column_name, target_value)
+      category_matches <- category_matches | matches
     }
     
-    # Always add default columns (Sun Level, Moisture Level) at the end
-    for (default_category in DEFAULT_COLUMNS) {
-      column_name <- get_column_name_for_category(default_category)
-      if (!is.null(column_name) && column_name %in% names(plant_data) && 
-          !default_category %in% names(results)) {
-        results[[default_category]] <- plant_data[[column_name]]
-      }
-    }
-    
-    # Add propagation information if selected
-    if (criteria$propagation_selected && "propagation_methods" %in% names(plant_data)) {
-      results[["Propagation Description"]] <- plant_data$propagation_methods
-    }
-    
-    # Sort by match score (highest first), then by scientific name
-    results <- results[order(-results$`Match Score`, results$`Scientific Name`), ]
-    
-    return(results)
+    plant_data[category_matches, ]
   }
   
-  # Results count output
+  filtered_plant_list <- reactive({
+    req(input$selected_state)
+    
+    tryCatch({
+      # Get climate data
+      state_abbreviation <- STATE_ABBREVIATIONS[input$selected_state]
+      future_climate_data <- hardiness_zones_data[
+        hardiness_zones_data$State == state_abbreviation & 
+        hardiness_zones_data$Time_Period == "FutureWorst", 
+      ]
+      
+      if (nrow(future_climate_data) == 0) return(data.frame())
+      
+      state_min_zone <- future_climate_data$Zone.Min[1]
+      state_max_zone <- future_climate_data$Zone.Max[1]
+      
+      # Filter by climate suitability
+      climate_suitable_plants <- cleaned_plant_data[
+        cleaned_plant_data$max_hardiness_zone >= state_min_zone & 
+        cleaned_plant_data$min_hardiness_zone <= state_max_zone, 
+      ]
+      
+      if (nrow(climate_suitable_plants) == 0) return(data.frame())
+      
+      # Parse criteria
+      selected_filter_ids <- input$plant_characteristic_tree
+      if (is.null(selected_filter_ids)) selected_filter_ids <- character(0)
+      selected_criteria <- parse_selected_criteria(selected_filter_ids)
+      
+      # Apply required filters
+      filtered_plants <- climate_suitable_plants
+      for (required_category in REQUIRED_FILTER_CATEGORIES) {
+        if (required_category %in% names(selected_criteria$by_category)) {
+          category_values <- selected_criteria$by_category[[required_category]]
+          column_name <- get_column_name_for_category(required_category)
+          
+          if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
+            filtered_plants <- filter_by_category_values(filtered_plants, column_name, category_values)
+          }
+        }
+      }
+      
+      if (nrow(filtered_plants) == 0) return(data.frame())
+      
+      # Apply hardiness zone range filter
+      zone_range <- input$hardiness_zone_range
+      if (!is.null(zone_range) && length(zone_range) == 2) {
+        if (zone_range[1] != 1 || zone_range[2] != 12) {
+          filtered_plants <- filtered_plants[
+            filtered_plants$min_hardiness_zone <= zone_range[2] & 
+            filtered_plants$max_hardiness_zone >= zone_range[1], 
+          ]
+        }
+      }
+      
+      # Calculate match scores
+      filtered_plants$match_score <- 0
+      
+      optional_categories <- names(selected_criteria$by_category)[
+        !names(selected_criteria$by_category) %in% REQUIRED_FILTER_CATEGORIES
+      ]
+      
+      for (category in optional_categories) {
+        category_values <- selected_criteria$by_category[[category]]
+        column_name <- get_column_name_for_category(category)
+        
+        if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
+          matches <- check_category_matches(filtered_plants, column_name, category_values)
+          filtered_plants$match_score[matches] <- filtered_plants$match_score[matches] + 1
+        }
+      }
+      
+      # Bonus points
+      if (!is.null(zone_range) && length(zone_range) == 2 && 
+          (zone_range[1] != 1 || zone_range[2] != 12)) {
+        filtered_plants$match_score <- filtered_plants$match_score + 1
+      }
+      
+      if (selected_criteria$propagation_selected) {
+        filtered_plants$match_score <- filtered_plants$match_score + 1
+      }
+      
+      # Prepare results table
+      results <- data.frame(
+        "Match Score" = filtered_plants$match_score,
+        "Scientific Name" = filtered_plants$scientific_name,
+        "Common Name" = filtered_plants$common_name,
+        "Min Zone" = filtered_plants$min_hardiness_zone,
+        "Max Zone" = filtered_plants$max_hardiness_zone,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+      
+      # Add selected characteristic columns
+      selected_categories <- names(selected_criteria$by_category)
+      priority_categories <- c("Growth Habit", "Climate Status")
+      
+      for (category in c(priority_categories, 
+                        selected_categories[!selected_categories %in% priority_categories],
+                        DEFAULT_COLUMNS)) {
+        column_name <- get_column_name_for_category(category)
+        if (!is.null(column_name) && column_name %in% names(filtered_plants) && 
+            !category %in% names(results)) {
+          results[[category]] <- filtered_plants[[column_name]]
+        }
+      }
+      
+      # Add propagation if selected
+      if (selected_criteria$propagation_selected && "propagation_methods" %in% names(filtered_plants)) {
+        results[["Propagation Description"]] <- filtered_plants$propagation_methods
+      }
+      
+      # Sort results
+      results[order(-results$`Match Score`, results$`Scientific Name`), ]
+      
+    }, error = function(e) {
+      cat(sprintf("Error in filtered_plant_list: %s\n", e$message))
+      data.frame()
+    })
+  })
+  
   output$plant_results_count <- renderText({
     results <- filtered_plant_list()
     if (is.null(results) || nrow(results) == 0) {
       return("0 plants found")
     }
-    return(paste(nrow(results), "plants found"))
+    paste(nrow(results), "plants found")
   })
   
-  # Main data table output with enhanced formatting
   output$plant_results_table <- DT::renderDataTable({
     tryCatch({
       results <- filtered_plant_list()
       
-      # Handle empty results
       if (is.null(results) || nrow(results) == 0) {
-        empty_message <- data.frame(
-          "Message" = "No plants match your criteria. Try adjusting your filters or selecting a different state."
-        )
         return(datatable(
-          empty_message, 
+          data.frame("Message" = "No plants match your criteria. Try adjusting your filters."), 
           options = list(dom = 't', searching = FALSE),
-          rownames = FALSE, 
-          colnames = ""
+          rownames = FALSE, colnames = ""
         ))
       }
       
-      # Create enhanced data table with improved performance
       datatable(
         results,
-        extensions = c('Buttons'),
+        extensions = 'Buttons',
         options = list(
-          # Basic table configuration
           dom = 'Bfrtip',
           pageLength = DEFAULT_PAGE_SIZE,
-          
-          # Scrolling configuration (optimized)
           scrollX = TRUE,
-          scrollY = FALSE,
-          
-          # Column definitions for better formatting
           columnDefs = list(
-            list(targets = 3, width = "80px", className = "dt-center"),   # Min Zone
-            list(targets = 4, width = "80px", className = "dt-center"),   # Max Zone
-            list(targets = "_all", width = "150px")                       # All other columns
+            list(targets = 3, width = "80px", className = "dt-center"),
+            list(targets = 4, width = "80px", className = "dt-center"),
+            list(targets = "_all", width = "150px")
           ),
-          
-          # Export functionality
           buttons = list(
             list(extend = 'csv', text = 'Download CSV'),
             list(extend = 'excel', text = 'Download Excel'),
             list(extend = 'pdf', text = 'Download PDF')
           ),
-          
-          # Table behavior settings
           responsive = FALSE,
           autoWidth = FALSE,
           searching = TRUE,
           lengthChange = TRUE,
           info = FALSE,
           paging = FALSE,
-          
-          # Default sorting: Match Score descending, then Scientific Name ascending
           order = list(list(0, 'desc'), list(1, 'asc')),
-          
-          # Performance optimizations
           deferRender = TRUE,
           processing = TRUE
         ),
@@ -1017,7 +601,6 @@ server <- function(input, output, session) {
         class = 'table-hover table-striped compact',
         style = 'bootstrap4'
       ) %>%
-        # Enhanced match score formatting with color gradient
         formatStyle(
           'Match Score',
           backgroundColor = styleInterval(
@@ -1027,7 +610,6 @@ server <- function(input, output, session) {
           fontWeight = 'bold',
           textAlign = 'center'
         ) %>%
-        # Format hardiness zone columns
         formatStyle(
           c('Min Zone', 'Max Zone'),
           textAlign = 'center',
@@ -1035,21 +617,14 @@ server <- function(input, output, session) {
         )
         
     }, error = function(e) {
-      cat(sprintf("Error in renderDataTable: %s\n", e$message))
-      error_message <- data.frame(
-        "Error" = paste("Error loading data:", e$message)
-      )
-      return(datatable(
-        error_message, 
+      datatable(
+        data.frame("Error" = paste("Error loading data:", e$message)), 
         options = list(dom = 't', searching = FALSE),
-        rownames = FALSE, 
-        colnames = ""
-      ))
+        rownames = FALSE, colnames = ""
+      )
     })
   })
 }
 
 # Application Execution ========================================================
-#' Launch the Climate-Smart Plant Selection Application
-#' @return Shiny application object
 shinyApp(ui = ui, server = server)
