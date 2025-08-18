@@ -53,7 +53,7 @@ load_application_data <- function() {
   tryCatch({
     hardiness_zones_by_state <- read.csv("data/state.hz.csv")
     zipcode_reference <- read.csv("data/zipcodes.csv")
-    plant_database <- read.csv("data/ClimateSmart_Data_Cleaned.csv")
+    plant_database <- read.csv("data/ClimateSmart_Data.csv")
     
     cat("Data loading completed successfully\n")
     cat(sprintf("- Hardiness zones: %d records\n", nrow(hardiness_zones_by_state)))
@@ -75,15 +75,13 @@ create_filter_configuration <- function() {
   data.frame(
     column_name = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", 
                    "Bloom.Period", "Color", "Interesting.Foliage", "Showy", 
-                   "Garden.Aggressive", "Bird.Services", "Mammal.Services", 
-                   "Insect.Services", "Reptile.Amphibian.Services", "Pollinators", 
+                   "Garden.Aggressive",  "Wildlife.Services", "Pollinators", 
                    "Climate.Status"),
     display_name = c("Growth Habit", "Sun Level", "Moisture Level", "Soil Type", 
                     "Bloom Period", "Color", "Interesting Foliage", "Showy", 
-                    "Garden Aggressive", "Bird Services", "Mammal Services", 
-                    "Insect Services", "Reptile/Amphibian Services", "Pollinators", 
+                    "Garden Aggressive", "Wildlife Services", "Pollinators", 
                     "Climate Status"),
-    is_filterable = rep(TRUE, 15),
+    is_filterable = rep(TRUE, 12),
     stringsAsFactors = FALSE
   )
 }

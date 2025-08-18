@@ -82,9 +82,9 @@ nav a:hover {
 
 /* Hero section */
 .intro {
-  padding: 4rem 0;
+  padding: 2rem 0;
   background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-tertiary) 100%);
-  text-align: center;
+  text-align: left;
   position: relative;
 }
 
@@ -98,8 +98,8 @@ nav a:hover {
 .intro p {
   font-size: 1.2rem;
   color: var(--text-secondary);
-  max-width: 800px;
-  margin: 0 auto;
+  max-width: auto;
+  margin: 0;
 }
 
 /* Add modern green gradient accent */
