@@ -133,10 +133,164 @@ extract_categorical_values <- function(data, column_name) {
   cleaned_values <- all_values %>%
     str_trim() %>%
     .[. != "" & !is.na(.) & . != "NA"] %>%
-    unique() %>%
-    sort()
+    unique()
   
-  return(cleaned_values)
+  # Determine category for ordering
+  category <- get_display_name_for_column(column_name)
+  
+  # Apply custom ordering
+  ordered_values <- apply_custom_ordering(cleaned_values, category)
+  
+  return(ordered_values)
+}
+
+
+#' Custom ordering function for categorical values
+#' @param values Character vector of values to order
+#' @param category Category name to determine ordering logic
+#' @return Ordered character vector
+apply_custom_ordering <- function(values, category) {
+  if (length(values) == 0) return(values)
+  
+  # Remove duplicates and NA values
+  clean_values <- unique(values[!is.na(values) & values != "" & values != "NA"])
+  
+  if (length(clean_values) == 0) return(character(0))
+  
+  # Apply category-specific ordering
+  ordered_values <- switch(category,
+    "Growth Habit" = order_growth_habit(clean_values),
+    "Sun Level" = order_sun_level(clean_values),
+    "Moisture Level" = order_moisture_level(clean_values),
+    "Soil Type" = order_soil_type(clean_values),
+    "Bloom Period" = order_bloom_period(clean_values),
+    "Color" = order_color(clean_values),
+    "Wildlife Services" = order_wildlife_services(clean_values),
+    # Default: alphabetical with special values at end
+    order_default(clean_values)
+  )
+  
+  return(ordered_values)
+}
+
+#' Order Growth Habit values logically
+order_growth_habit <- function(values) {
+  preferred_order <- c(
+    "Annual", "Perennial Herb", "Grass", "Fern", "Vine",
+    "Shrub", "Tree", "Other"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Sun Level from most to least sun
+order_sun_level <- function(values) {
+  preferred_order <- c(
+    "Full Sun", "Part Shade", "Full Shade", "Not Specified"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Moisture Level from driest to wettest
+order_moisture_level <- function(values) {
+  preferred_order <- c(
+    "Dry", "Medium", "Moist", "Wet", "Not Specified"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Soil Type logically
+order_soil_type <- function(values) {
+  preferred_order <- c(
+    "Sandy", "Loam", "Clay", "Well-drained", "Moist", "Other", "Not Specified"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Bloom Period chronologically
+order_bloom_period <- function(values) {
+  preferred_order <- c(
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+    "Indeterminate", "Non-flowering", "Rarely Flowers"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Color by spectrum
+order_color <- function(values) {
+  preferred_order <- c(
+    "Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
+    "Pink", "Brown", "White", "Not Applicable"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Order Wildlife Services by animal type
+order_wildlife_services <- function(values) {
+  preferred_order <- c(
+    "Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "None"
+  )
+  
+  return(order_by_preference(values, preferred_order))
+}
+
+#' Default ordering: alphabetical with special values at end
+order_default <- function(values) {
+  special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
+  
+  # Separate special values from regular values
+  regular_values <- values[!values %in% special_endings]
+  special_values <- values[values %in% special_endings]
+  
+  # Sort regular values alphabetically
+  regular_sorted <- sort(regular_values)
+  
+  # Order special values by preference
+  special_sorted <- special_values[order(match(special_values, special_endings))]
+  
+  return(c(regular_sorted, special_sorted))
+}
+
+#' Helper function to order values by preferred sequence
+order_by_preference <- function(values, preferred_order) {
+  # Find values that match the preferred order
+  matched_values <- preferred_order[preferred_order %in% values]
+  
+  # Find values not in preferred order (sort alphabetically)
+  unmatched_values <- sort(values[!values %in% preferred_order])
+  
+  return(c(matched_values, unmatched_values))
+}
+
+# Helper function to get display name from column name
+get_display_name_for_column <- function(column_name) {
+  display_mapping <- c(
+    "Growth.Habit" = "Growth Habit",
+    "Sun.Level" = "Sun Level",
+    "Moisture.Level" = "Moisture Level",
+    "Soil.Type" = "Soil Type",
+    "Bloom.Period" = "Bloom Period",
+    "Color" = "Color",
+    "Interesting.Foliage" = "Interesting Foliage",
+    "Showy" = "Showy",
+    "Garden.Aggressive" = "Garden Aggressive",
+    "Wildlife.Services" = "Wildlife Services",
+    "Pollinators" = "Pollinators",
+    "Climate.Status" = "Climate Status",
+    "propagation_keywords" = "Propagation Keywords"
+  )
+  
+  if (column_name %in% names(display_mapping)) {
+    return(display_mapping[column_name])
+  }
+  
+  return(column_name)
 }
 
 #' Create comprehensive filter options for all plant characteristics (excluding hardiness zones)
