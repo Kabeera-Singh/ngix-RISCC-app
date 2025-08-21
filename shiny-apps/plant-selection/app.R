@@ -14,7 +14,7 @@ library(data.table)
 print("Initializing Climate-Smart Plant Selection Application...")
 
 # Constants
-REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status")
+REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
 DEFAULT_PAGE_SIZE <- 20
 MAX_MATCH_SCORE <- 5
 DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
@@ -147,6 +147,7 @@ create_filter_options <- function(plant_data, filter_config) {
     column_name = character(0),
     display_name = character(0),
     available_values = character(0),
+    is_filter = logical(0),
     stringsAsFactors = FALSE
   )
   
@@ -157,24 +158,31 @@ create_filter_options <- function(plant_data, filter_config) {
   for (i in seq_along(all_columns)) {
     values <- extract_categorical_values(plant_data, all_columns[i])
     if (length(values) > 0) {
+      is_filter_column <- all_display_names[i] %in% REQUIRED_FILTER_CATEGORIES
       filter_options <- rbind(filter_options, data.frame(
         column_name = all_columns[i],
         display_name = all_display_names[i],
         available_values = paste(values, collapse = ","),
+        is_filter = is_filter_column,
         stringsAsFactors = FALSE
       ))
     }
   }
   
-  # Reorder with priorities first
-  priority_order <- c("Growth.Habit", "Climate.Status")
-  priority_rows <- filter_options[filter_options$column_name %in% priority_order, ]
-  other_rows <- filter_options[!filter_options$column_name %in% priority_order, ]
+  # Separate filter and sorting columns
+  filter_columns <- filter_options[filter_options$is_filter, ]
+  sorting_columns <- filter_options[!filter_options$is_filter, ]
   
-  priority_rows <- priority_rows[match(priority_order, priority_rows$column_name), ]
-  priority_rows <- priority_rows[!is.na(priority_rows$column_name), ]
+  # Order filter columns by priority
+  filter_priority_order <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
+  filter_columns <- filter_columns[match(filter_priority_order, filter_columns$display_name), ]
+  filter_columns <- filter_columns[!is.na(filter_columns$column_name), ]
   
-  rbind(priority_rows, other_rows)
+  # Order sorting columns alphabetically
+  sorting_columns <- sorting_columns[order(sorting_columns$display_name), ]
+  
+  # Combine back together
+  rbind(filter_columns, sorting_columns)
 }
 
 create_filter_tree <- function(filter_options) {
@@ -183,43 +191,98 @@ create_filter_tree <- function(filter_options) {
   tree_structure <- list()
   node_id_counter <- 1
   
-  for (i in seq_len(nrow(filter_options))) {
-    category <- filter_options$display_name[i]
-    values <- str_trim(strsplit(filter_options$available_values[i], ",")[[1]])
-    values <- values[values != "" & !is.na(values)]
-    
-    if (length(values) == 0) next
-    
-    category_node <- list(
-      text = category,
-      id = paste0("category_", node_id_counter),
-      children = lapply(values, function(value) {
-        node_id_counter <<- node_id_counter + 1
-        list(text = value, id = paste0("item_", node_id_counter))
-      })
+  # Separate filter and sorting options
+  filter_columns <- filter_options[filter_options$is_filter, ]
+  sorting_columns <- filter_options[!filter_options$is_filter, ]
+  
+  # Add Filter Columns section header
+  if (nrow(filter_columns) > 0) {
+    filter_header <- list(
+      text = "FILTER COLUMNS",
+      id = "filter_header",
+      type = "header",
+      selectable = FALSE
     )
-    node_id_counter <- node_id_counter + 1
-    tree_structure <- append(tree_structure, list(category_node))
+    tree_structure <- append(tree_structure, list(filter_header))
+    
+    # Add filter columns
+    for (i in seq_len(nrow(filter_columns))) {
+      category <- filter_columns$display_name[i]
+      values <- str_trim(strsplit(filter_columns$available_values[i], ",")[[1]])
+      values <- values[values != "" & !is.na(values)]
+      
+      if (length(values) == 0) next
+      
+      category_node <- list(
+        text = category,
+        id = paste0("category_", node_id_counter),
+        children = lapply(values, function(value) {
+          node_id_counter <<- node_id_counter + 1
+          list(text = value, id = paste0("item_", node_id_counter))
+        })
+      )
+      node_id_counter <- node_id_counter + 1
+      tree_structure <- append(tree_structure, list(category_node))
+    }
+  }
+  
+  # Add Sorting Columns section header
+  if (nrow(sorting_columns) > 0) {
+    sorting_header <- list(
+      text = "SORTING COLUMNS",
+      id = "sorting_header", 
+      type = "header",
+      selectable = FALSE
+    )
+    tree_structure <- append(tree_structure, list(sorting_header))
+    
+    # Add sorting columns
+    for (i in seq_len(nrow(sorting_columns))) {
+      category <- sorting_columns$display_name[i]
+      values <- str_trim(strsplit(sorting_columns$available_values[i], ",")[[1]])
+      values <- values[values != "" & !is.na(values)]
+      
+      if (length(values) == 0) next
+      
+      category_node <- list(
+        text = category,
+        id = paste0("category_", node_id_counter),
+        children = lapply(values, function(value) {
+          node_id_counter <<- node_id_counter + 1
+          list(text = value, id = paste0("item_", node_id_counter))
+        })
+      )
+      node_id_counter <- node_id_counter + 1
+      tree_structure <- append(tree_structure, list(category_node))
+    }
   }
   
   tree_structure
 }
 
-create_tree_mapping <- function(tree_structure) {
+create_tree_mapping <- function(tree_structure, filter_options) {
   mapping <- data.frame(
     node_id = character(0),
     category = character(0),
     value = character(0),
+    is_filter = logical(0),
     stringsAsFactors = FALSE
   )
   
   for (category_node in tree_structure) {
+    # Skip header nodes
+    if (!is.null(category_node$type) && category_node$type == "header") next
+    
     if (!is.null(category_node$children)) {
+      category <- category_node$text
+      is_filter_category <- any(filter_options$display_name == category & filter_options$is_filter)
+      
       for (child_node in category_node$children) {
         mapping <- rbind(mapping, data.frame(
           node_id = child_node$id,
-          category = category_node$text,
+          category = category,
           value = child_node$text,
+          is_filter = is_filter_category,
           stringsAsFactors = FALSE
         ))
       }
@@ -242,7 +305,7 @@ filter_configuration <- create_filter_configuration()
 cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
 complete_filter_options <- create_filter_options(cleaned_plant_data, filter_configuration)
 filter_tree_structure <- create_filter_tree(complete_filter_options)
-tree_node_mapping <- create_tree_mapping(filter_tree_structure)
+tree_node_mapping <- create_tree_mapping(filter_tree_structure, complete_filter_options)
 
 cat("Application initialization completed successfully!\n")
 
@@ -254,7 +317,22 @@ ui <- fluidPage(
     tags$link(
       href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", 
       rel = "stylesheet"
-    )
+    ),
+    tags$style(HTML("
+      .tree-header {
+        font-weight: bold;
+        color: #666;
+        font-size: 12px;
+        padding: 10px 5px 5px 5px;
+        border-bottom: 1px solid #ddd;
+        margin-bottom: 5px;
+        background-color: #f8f9fa;
+        letter-spacing: 0.5px;
+      }
+      .tree-header:first-of-type {
+        margin-top: 0;
+      }
+    "))
   ),
   
   useShinyjs(),
@@ -273,8 +351,8 @@ ui <- fluidPage(
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
       p(paste(
         "Select your state and desired site and plant characteristics below.",
-        "The tool will generate a list of native and near-native plants likely",
-        "to survive both current and future climate conditions."
+        "Filter columns must match for plants to appear in results.",
+        "Sorting columns add to the match score to help rank plants by preference."
       ))
     ),
     
@@ -356,7 +434,8 @@ server <- function(input, output, session) {
   
   # Unified helper functions
   parse_selected_criteria <- function(selected_ids) {
-    criteria_by_category <- list()
+    filter_criteria <- list()
+    sorting_criteria <- list()
     propagation_selected <- FALSE
     
     if (length(selected_ids) > 0 && nrow(tree_node_mapping) > 0) {
@@ -367,17 +446,24 @@ server <- function(input, output, session) {
           node_info <- matching_nodes[1, ]
           category <- as.character(node_info$category)
           value <- as.character(node_info$value)
+          is_filter <- node_info$is_filter
           
           if (category == "Propagation Keywords") {
             propagation_selected <- TRUE
+          } else if (is_filter) {
+            filter_criteria[[category]] <- c(filter_criteria[[category]], value)
           } else {
-            criteria_by_category[[category]] <- c(criteria_by_category[[category]], value)
+            sorting_criteria[[category]] <- c(sorting_criteria[[category]], value)
           }
         }
       }
     }
     
-    list(by_category = criteria_by_category, propagation_selected = propagation_selected)
+    list(
+      filter_criteria = filter_criteria, 
+      sorting_criteria = sorting_criteria, 
+      propagation_selected = propagation_selected
+    )
   }
   
   get_column_name_for_category <- function(category) {
@@ -413,6 +499,32 @@ server <- function(input, output, session) {
     }
     
     all_matches
+  }
+  
+  count_category_matches <- function(plant_data, column_name, target_values) {
+    if (!column_name %in% names(plant_data)) return(rep(0, nrow(plant_data)))
+    
+    column_values <- as.character(plant_data[[column_name]])
+    column_values[is.na(column_values)] <- ""
+    
+    match_counts <- rep(0, length(column_values))
+    
+    for (target_value in target_values) {
+      if (is.na(target_value) || target_value == "") next
+      
+      escaped_target <- gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", target_value)
+      exact_matches <- grepl(paste0("\\b", escaped_target, "\\b"), 
+                           column_values, ignore.case = TRUE)
+      
+      if (!any(exact_matches, na.rm = TRUE)) {
+        substring_matches <- grepl(escaped_target, column_values, ignore.case = TRUE)
+        match_counts <- match_counts + as.numeric(substring_matches)
+      } else {
+        match_counts <- match_counts + as.numeric(exact_matches)
+      }
+    }
+    
+    match_counts
   }
   
   filter_by_category_values <- function(plant_data, column_name, target_values) {
@@ -456,18 +568,16 @@ server <- function(input, output, session) {
       # Parse criteria
       selected_filter_ids <- input$plant_characteristic_tree
       if (is.null(selected_filter_ids)) selected_filter_ids <- character(0)
-      selected_criteria <- parse_selected_criteria(selected_filter_ids)
+      criteria <- parse_selected_criteria(selected_filter_ids)
       
-      # Apply required filters
+      # Apply ALL filter criteria (must match all selected filter categories)
       filtered_plants <- climate_suitable_plants
-      for (required_category in REQUIRED_FILTER_CATEGORIES) {
-        if (required_category %in% names(selected_criteria$by_category)) {
-          category_values <- selected_criteria$by_category[[required_category]]
-          column_name <- get_column_name_for_category(required_category)
-          
-          if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
-            filtered_plants <- filter_by_category_values(filtered_plants, column_name, category_values)
-          }
+      for (filter_category in names(criteria$filter_criteria)) {
+        category_values <- criteria$filter_criteria[[filter_category]]
+        column_name <- get_column_name_for_category(filter_category)
+        
+        if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
+          filtered_plants <- filter_by_category_values(filtered_plants, column_name, category_values)
         }
       }
       
@@ -484,20 +594,16 @@ server <- function(input, output, session) {
         }
       }
       
-      # Calculate match scores
+      # Calculate match scores from sorting criteria
       filtered_plants$match_score <- 0
       
-      optional_categories <- names(selected_criteria$by_category)[
-        !names(selected_criteria$by_category) %in% REQUIRED_FILTER_CATEGORIES
-      ]
-      
-      for (category in optional_categories) {
-        category_values <- selected_criteria$by_category[[category]]
-        column_name <- get_column_name_for_category(category)
+      for (sorting_category in names(criteria$sorting_criteria)) {
+        category_values <- criteria$sorting_criteria[[sorting_category]]
+        column_name <- get_column_name_for_category(sorting_category)
         
         if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
-          matches <- check_category_matches(filtered_plants, column_name, category_values)
-          filtered_plants$match_score[matches] <- filtered_plants$match_score[matches] + 1
+          match_counts <- count_category_matches(filtered_plants, column_name, category_values)
+          filtered_plants$match_score <- filtered_plants$match_score + match_counts
         }
       }
       
@@ -507,7 +613,7 @@ server <- function(input, output, session) {
         filtered_plants$match_score <- filtered_plants$match_score + 1
       }
       
-      if (selected_criteria$propagation_selected) {
+      if (criteria$propagation_selected) {
         filtered_plants$match_score <- filtered_plants$match_score + 1
       }
       
@@ -523,12 +629,12 @@ server <- function(input, output, session) {
       )
       
       # Add selected characteristic columns
-      selected_categories <- names(selected_criteria$by_category)
-      priority_categories <- c("Growth Habit", "Climate Status")
+      all_selected_categories <- c(names(criteria$filter_criteria), names(criteria$sorting_criteria))
+      priority_categories <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
       
       for (category in c(priority_categories, 
-                        selected_categories[!selected_categories %in% priority_categories],
-                        DEFAULT_COLUMNS)) {
+                        all_selected_categories[!all_selected_categories %in% priority_categories],
+                        DEFAULT_COLUMNS[!DEFAULT_COLUMNS %in% all_selected_categories])) {
         column_name <- get_column_name_for_category(category)
         if (!is.null(column_name) && column_name %in% names(filtered_plants) && 
             !category %in% names(results)) {
@@ -537,7 +643,7 @@ server <- function(input, output, session) {
       }
       
       # Add propagation if selected
-      if (selected_criteria$propagation_selected && "propagation_methods" %in% names(filtered_plants)) {
+      if (criteria$propagation_selected && "propagation_methods" %in% names(filtered_plants)) {
         results[["Propagation Description"]] <- filtered_plants$propagation_methods
       }
       
