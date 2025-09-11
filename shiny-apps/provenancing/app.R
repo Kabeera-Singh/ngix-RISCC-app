@@ -5,7 +5,6 @@ options(mc.cores = parallel::detectCores())
 # Load required libraries
 library(sf)
 library(shiny)
-library(bslib)
 library(leaflet)
 library(dplyr)
 library(ggplot2)
@@ -114,64 +113,160 @@ get_species_occurrences_spatial <- function(species_name, bbox = NULL) {
   return(dbGetQuery(con, base_query))
 }
 
-ui <- page_fluid(
-  titlePanel("Climate Adjusted Provenancing Tool"),
-  sidebarLayout(
-    sidebarPanel = sidebarPanel(
-      width = 3,
-      card(
-        tags$p("1) Input the coordinates of your focal site here.", 
-               style = "font-family: 'Calibri'; font-size: 16px;"),  
-        numericInput("Long", "longitude", value = -72.5, step = 0.1),
-        numericInput("Lat", "latitude", value = 42.4, step = 0.1)
-      ),
-      card(
-        tags$p("2) Select the climate projection SCENARIO and climate variable FILTER you'd like to include in the reference site finder", 
-               style = "font-family: 'Calibri'; font-size: 16px;"),
-        selectizeInput(
-          inputId = 'scenario',
-          label = " choose climate scenario",
-          choices = c("contemporary", "low (+2C)", "med (+4C)"),
-          selected = "contemporary"
-        ),
-        selectizeInput(
-          inputId = 'filtr',
-          label = "choose a climate filter",
-          choices = c("temperature", "climatic water deficit"),
-          selected = "temperature"
+ui <- fluidPage(
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
+    tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
+    tags$link(
+      href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
+      rel = "stylesheet"
+    )
+  ),
+  
+  div(class = "app-header",
+    div(class = "header-container",
+      h1("Climate Adjusted Provenancing Tool"),
+      a(href = "/", class = "home-btn",
+        tags$i(class = "fas fa-home"), " Back to Home"
+      )
+    )
+  ),
+  
+  div(class = "main-container",
+    div(class = "info-card",
+      h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
+      p(paste(
+        "Welcome to the Climate Adjusted Provenancing Tool. You can use this tool to identify",
+        "vegetation assemblages that correspond to current and future climate conditions at your",
+        "location of interest and identify taxa that are widely distributed under these climate conditions.",
+        "The data underlying this product come from Petri et al. 2022, and can be accessed in full at",
+        "https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947.",
+        "Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here."
+      ))
+    ),
+    
+    div(class = "main-layout",
+      div(class = "sidebar",
+        div(class = "filter-card",
+          div(class = "filter-header",
+            h5(tags$i(class = "fas fa-sliders-h"), " Climate & Location Settings")
+          ),
+          div(class = "filter-body",
+            # Step 1: Coordinates
+            div(class = "form-group step-section",
+              div(class = "step-header",
+                tags$span(class = "step-number", "1"),
+                tags$label(tags$i(class = "fas fa-map-marker-alt"), " Input coordinates of your focal site")
+              ),
+              div(class = "coordinate-inputs",
+                div(class = "coord-input-group",
+                  tags$label("Longitude", class = "coord-label"),
+                  numericInput("Long", label = NULL, value = -72.5, step = 0.1, width = "100%")
+                ),
+                div(class = "coord-input-group",
+                  tags$label("Latitude", class = "coord-label"),
+                  numericInput("Lat", label = NULL, value = 42.4, step = 0.1, width = "100%")
+                )
+              )
+            ),
+            
+            # Step 2: Climate Settings
+            div(class = "form-group step-section",
+              div(class = "step-header",
+                tags$span(class = "step-number", "2"),
+                tags$label(tags$i(class = "fas fa-thermometer-half"), " Select climate projection and filter")
+              ),
+              selectInput("scenario", 
+                label = tags$div(class = "input-label", tags$i(class = "fas fa-calendar-alt"), " Choose climate scenario"),
+                choices = c("contemporary", "low (+2C)", "med (+4C)"),
+                selected = "contemporary", width = "100%"),
+              selectInput("filtr",
+                label = tags$div(class = "input-label", tags$i(class = "fas fa-filter"), " Choose a climate filter"),
+                choices = c("temperature", "climatic water deficit"),
+                selected = "temperature", width = "100%")
+            ),
+            
+            # Step 5: Growth Habits
+            div(class = "form-group step-section",
+              div(class = "step-header",
+                tags$span(class = "step-number", "5"),
+                tags$label(tags$i(class = "fas fa-seedling"), " Select plant growth habits of interest")
+              ),
+              div(class = "habits-container",
+                checkboxGroupInput("habit", label = NULL, 
+                  choices = habits, selected = habits, width = "100%")
+              )
+            ),
+            
+            # Download Buttons
+            div(class = "download-section",
+              tags$h6(class = "download-title", 
+                tags$i(class = "fas fa-download"), " Download Data"
+              ),
+              div(class = "download-buttons",
+                downloadButton("downloadData", "Download Map Data", 
+                  class = "btn-download btn-map-data",
+                  icon = icon("map")),
+                downloadButton("downloadData1", "Download Species Summary", 
+                  class = "btn-download btn-species-data",
+                  icon = icon("chart-bar"))
+              )
+            )
+          )
         )
       ),
-      card(
-        tags$p("5) Select the plants growth habits of interest.", 
-               style = "font-family: 'Calibri'; font-size: 16px;"),
-        checkboxGroupInput("habit", label = "Growth Habit", choices = habits, selected = habits)
-      ),
-      card(
-        downloadButton("downloadData", "Download data subset from map 1"),
-        downloadButton("downloadData1", "Download table summary from plot 1")
+      
+      div(class = "main-panel",
+        # Map Card
+        div(class = "results-card map-card",
+          div(class = "results-header",
+            div(class = "step-header-main",
+              tags$span(class = "step-number-main", "3"),
+              h5(tags$i(class = "fas fa-globe-americas"), " Climate-Adjusted Provenancing Localities")
+            )
+          ),
+          div(class = "map-container",
+            leafletOutput("mymap", height = "400px"),
+            p(class = "map-description", 
+              "Map 1: Click on any points to access additional information about the vegetation plot. Large datasets are loaded progressively.")
+          )
+        ),
+        
+        # Species Analysis Card
+        div(class = "results-card species-card",
+          div(class = "results-header",
+            div(class = "step-header-main",
+              tags$span(class = "step-number-main", "4"),
+              h5(tags$i(class = "fas fa-chart-bar"), " Most Common Species in Climate Range")
+            )
+          ),
+          div(class = "plot-container",
+            plotOutput("myplot", height = '400px', click = "plot_click"),
+            div(class = "step-instruction",
+              div(class = "step-header-main",
+                tags$span(class = "step-number-main", "6"),
+                tags$p(tags$i(class = "fas fa-mouse-pointer"), " Click on bars to see species occurrence range")
+              ),
+              textOutput("variable_name", inline = TRUE)
+            )
+          )
+        ),
+        
+        # Species Map Card
+        div(class = "results-card species-map-card",
+          div(class = "species-map-container",
+            leafletOutput("mymap2", height = "400px"),
+            p(class = "map-description",
+              "Map 2: The green points depict occurrences of the selected species, and the purple points represent those within the climate-adjusted range")
+          )
+        )
       )
-    ),
-    mainPanel = mainPanel(
-      card(
-        p("Welcome to the Climate Adjusted Provenancing Tool. You can use this tool to identify vegetation assemblages that correspond to current and future climate conditions at your location of interest and identify taxa that are widely distributed under these climate conditions. The data underlying this product come from Petri et al. 2022, and can be accessed in full at https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947. Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here.")
-      ),                
-      card(
-        tags$p("3) View a map of climate-adjusted, potential provenancing localities for your focal site:",
-               style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
-        leafletOutput("mymap"),
-        p("Map 1: Click on any points to access additional information about the vegetation plot. Large datasets are loaded progressively.")
-      ),
-      card(
-        tags$p("4) View the 30 most common species in your climate adjusted provenancing range.",
-               style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
-        plotOutput("myplot", height = '50vh', click = "plot_click"),
-        tags$p("6) Click on the bars to see the occurrence range of individual species on the map below.",
-               style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;"),
-        textOutput("variable_name"),
-        leafletOutput("mymap2"),
-        tags$p("Map 2: The green points depict occurrences of the selected species, and the purple points represent those within the climate-adjusted range",
-               style = "font-family: 'Calibri'; font-face: Bold; font-size: 16px;")
-      )
+    )
+  ),
+  
+  tags$footer(class = "app-footer",
+    div(class = "footer-container",
+      p("Climate Adjusted Provenancing Tool - Data from Petri et al. 2022")
     )
   )
 )
