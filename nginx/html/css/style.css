@@ -34,10 +34,12 @@ header {
 
 .header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+.header-content nav {
+  margin-left: auto;      /* pushes nav to the right */
 }
 
 .logo {
@@ -53,17 +55,19 @@ header {
 }
 
 .logo h1 {
-  font-size: 2.4rem;
+  font-size: 2.8rem;
   color: var(--primary-green);
   font-weight: 600;
 }
 
 /* Navigation */
+
 nav ul {
   list-style: none;
   display: flex;
   gap: 2rem;
-  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
 }
 
 nav a {
@@ -89,7 +93,7 @@ nav a:hover {
 }
 
 .intro h2 {
-  font-size: 2.5rem;
+  font-size: 2.3rem;
   color: var(--primary-green);
   margin-bottom: 1rem;
   font-weight: 600;

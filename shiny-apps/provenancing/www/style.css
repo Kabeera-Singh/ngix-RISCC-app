@@ -1,0 +1,677 @@
+/* ===========================================
+   CLIMATE ADJUSTED PROVENANCING TOOL STYLES
+   =========================================== */
+@import url('./shared-colors.css');
+
+/* ===========================================
+   RESET & GLOBAL STYLES
+   =========================================== */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+}
+
+/* ===========================================
+   LAYOUT CONTAINERS
+   =========================================== */
+.header-container,
+.main-container,
+.footer-container {
+  max-width: 1450px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.main-panel {
+  min-width: 0;
+}
+
+/* ===========================================
+   HEADER STYLES
+   =========================================== */
+.app-header {
+  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-light));
+  color: var(--text-white);
+  padding: 1.5rem 0;
+  box-shadow: 0 2px 10px var(--shadow-medium);
+  margin-bottom: 2rem;
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.app-header h1 {
+  font-size: 2.2rem;
+  font-weight: 600;
+  margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.home-btn {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-white);
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.home-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  color: var(--text-white);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.home-btn i {
+  margin-right: 0.5rem;
+}
+
+/* ===========================================
+   CARD COMPONENTS
+   =========================================== */
+.info-card {
+  background: linear-gradient(135deg, var(--viz-green-1), var(--viz-green-2));
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 10px var(--shadow-light);
+}
+
+.info-card h5 {
+  color: var(--primary-green);
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+}
+
+.info-card h5 i {
+  margin-right: 0.5rem;
+  color: var(--success-green);
+}
+
+.info-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.filter-card,
+.results-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.filter-header,
+.results-header {
+  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-light));
+  color: var(--text-white);
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.filter-header h5,
+.results-header h5 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.5rem;
+}
+
+.filter-header i,
+.results-header i {
+  margin-right: 0.5rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.filter-body {
+  padding: 1.5rem;
+}
+
+/* ===========================================
+   SIDEBAR & FILTERING
+   =========================================== */
+.sidebar {
+  position: sticky;
+  top: 2rem;
+}
+
+/* Step Sections */
+.step-section {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  transition: all 0.3s ease;
+}
+
+.step-section:hover {
+  box-shadow: 0 4px 15px var(--shadow-light);
+  transform: translateY(-2px);
+}
+
+.step-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1rem;
+  font-weight: 600;
+  color: var(--primary-green);
+  font-size: 1.1rem;
+}
+
+.step-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-number,
+.step-number-main {
+  background: linear-gradient(135deg, var(--primary-green), var(--success-green));
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+  margin-right: 0.75rem;
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+  flex-shrink: 0;
+}
+
+.step-number-main {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+}
+
+.step-header label {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.step-header i {
+  margin-right: 0.5rem;
+  color: var(--success-green);
+}
+
+/* Form Groups */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.input-label {
+  font-weight: 600;
+  color: var(--primary-green);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.input-label i {
+  margin-right: 0.5rem;
+  color: var(--success-green);
+}
+
+/* Coordinate Inputs */
+.coordinate-inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.coord-input-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.coord-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.3rem;
+  font-weight: 500;
+}
+
+/* Shiny Input Styling */
+.shiny-input-container {
+  margin-bottom: 1rem;
+}
+
+.shiny-input-container label {
+  font-weight: 600;
+  color: var(--primary-green);
+  margin-bottom: 0.5rem;
+}
+
+.shiny-input-container select,
+.shiny-input-container input[type="number"] {
+  width: 100%;
+  border: 2px solid var(--border-light);
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.shiny-input-container select:focus,
+.shiny-input-container input[type="number"]:focus {
+  border-color: var(--primary-green);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  outline: none;
+}
+
+/* Growth Habits Section */
+.habits-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 2px solid var(--border-light);
+  border-radius: 8px;
+  padding: 3rem;
+  background: var(--bg-primary);
+}
+
+.habits-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.habits-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.habits-container::-webkit-scrollbar-thumb {
+  background: var(--primary-green-lighter);
+  border-radius: 4px;
+}
+
+.habits-container::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-green);
+}
+
+.shiny-options-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.shiny-options-group .checkbox {
+  margin: 0.3rem 0;
+}
+
+.shiny-options-group input[type="checkbox"] {
+  margin-right: 0.5rem;
+  transform: scale(1.1);
+  accent-color: var(--primary-green);
+}
+
+.shiny-options-group label {
+  font-weight: normal;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.shiny-options-group label:hover {
+  background-color: var(--hover-overlay);
+}
+
+/* Download Section */
+.download-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--border-light);
+}
+
+.download-title {
+  color: var(--primary-green);
+  font-weight: 600;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+}
+
+.download-title i {
+  margin-right: 0.5rem;
+  color: var(--success-green);
+}
+
+.download-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btn-download {
+  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-dark));
+  color: white;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 3px 8px rgba(76, 175, 80, 0.3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-download:hover {
+  background: linear-gradient(135deg, var(--primary-green-dark), var(--success-green));
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+}
+
+.btn-download:active {
+  transform: translateY(0);
+}
+
+.btn-map-data {
+  background: linear-gradient(135deg, #17a2b8, #138496);
+}
+
+.btn-map-data:hover {
+  background: linear-gradient(135deg, #1cc7e0, #17a2b8);
+}
+
+.btn-species-data {
+  background: linear-gradient(135deg, #28a745, #20913a);
+}
+
+.btn-species-data:hover {
+  background: linear-gradient(135deg, #34ce57, #28a745);
+}
+
+/* ===========================================
+   MAIN PANEL CARDS
+   =========================================== */
+.map-container,
+.plot-container,
+.species-map-container {
+  padding: 1.5rem;
+}
+
+.map-description {
+  margin: 1rem 0 0 0;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+/* Species Analysis Specific */
+.step-instruction {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+}
+
+.step-instruction p {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+/* Selected Species Display */
+#variable_name {
+  font-weight: 600;
+  color: var(--primary-green-dark);
+  font-style: italic;
+  font-size: 1.1rem;
+  margin-top: 0.5rem;
+}
+
+/* ===========================================
+   LEAFLET MAP CUSTOMIZATION
+   =========================================== */
+.leaflet-container {
+  border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow-light);
+}
+
+.leaflet-popup-content {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.5;
+}
+
+.leaflet-popup-content strong {
+  color: var(--primary-green);
+}
+
+/* ===========================================
+   PLOT CUSTOMIZATION
+   =========================================== */
+.shiny-plot-output {
+  border-radius: 8px;
+  box-shadow: 0 2px 10px var(--shadow-light);
+  background: white;
+}
+
+/* ===========================================
+   NOTIFICATIONS
+   =========================================== */
+.shiny-notification {
+  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-light));
+  color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px var(--shadow-medium);
+  border: none;
+}
+
+.shiny-notification-message {
+  font-weight: 500;
+}
+
+.shiny-notification-close {
+  color: white;
+  opacity: 0.8;
+}
+
+.shiny-notification-close:hover {
+  opacity: 1;
+}
+
+/* ===========================================
+   FOOTER
+   =========================================== */
+.app-footer {
+  background: var(--primary-green-dark);
+  color: var(--text-white);
+  text-align: center;
+  padding: 2rem 0;
+  margin-top: 3rem;
+}
+
+.app-footer p {
+  margin: 0;
+  font-size: 1.1rem;
+  opacity: 0.9;
+}
+
+/* ===========================================
+   RESPONSIVE DESIGN
+   =========================================== */
+@media (max-width: 1200px) {
+  .main-layout {
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+  }
+  
+  .coordinate-inputs {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .main-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .sidebar {
+    position: static;
+  }
+  
+  .step-section {
+    padding: 1rem;
+  }
+  
+  .download-buttons {
+    flex-direction: row;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-container {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .app-header {
+    padding: 1rem 0;
+  }
+  
+  .app-header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+  }
+  
+  .main-container {
+    padding: 0 0.5rem;
+  }
+  
+  .info-card,
+  .filter-body,
+  .map-container,
+  .plot-container {
+    padding: 1rem;
+  }
+  
+  .step-section {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .download-buttons {
+    flex-direction: column;
+  }
+  
+  .coordinate-inputs {
+    grid-template-columns: 1fr;
+  }
+  
+  .shiny-options-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 576px) {
+  .header-container,
+  .main-container,
+  .footer-container {
+    padding: 0 0.5rem;
+  }
+  
+  .app-header h1 {
+    font-size: 1.6rem;
+  }
+  
+  .home-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .step-number,
+  .step-number-main {
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
+  }
+  
+  .step-number-main {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+}
+
+/* ===========================================
+   ACCESSIBILITY
+   =========================================== */
+.btn-download:focus,
+.shiny-input-container select:focus,
+.shiny-input-container input:focus {
+  outline: 2px solid var(--primary-green);
+  outline-offset: 2px;
+}
+
+/* ===========================================
+   LOADING STATES
+   =========================================== */
+.recalculating {
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+
+/* ===========================================
+   PRINT STYLES
+   =========================================== */
+@media print {
+  .app-header,
+  .app-footer,
+  .sidebar {
+    display: none;
+  }
+  
+  .main-layout {
+    grid-template-columns: 1fr;
+  }
+  
+  .results-card {
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+}

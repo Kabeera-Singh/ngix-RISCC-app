@@ -1,5 +1,5 @@
 # ==============================================================================
-# Climate-Smart Plant Selection Application
+# Climate-Smart Plant Selection Application - Fixed Version
 # ==============================================================================
 
 # Load Required Libraries =====================================================
@@ -185,82 +185,73 @@ create_filter_options <- function(plant_data, filter_config) {
   rbind(filter_columns, sorting_columns)
 }
 
+# Modified function to create separate filter and sorting trees
 create_filter_tree <- function(filter_options) {
   cat("Creating filter tree structure...\n")
   
   tree_structure <- list()
   node_id_counter <- 1
   
-  # Separate filter and sorting options
+  # Get only filter columns for the filter tree
   filter_columns <- filter_options[filter_options$is_filter, ]
-  sorting_columns <- filter_options[!filter_options$is_filter, ]
   
-  # Add Filter Columns section header
-  if (nrow(filter_columns) > 0) {
-    filter_header <- list(
-      text = "FILTER COLUMNS",
-      id = "filter_header",
-      type = "header",
-      selectable = FALSE
-    )
-    tree_structure <- append(tree_structure, list(filter_header))
+  # Add filter columns
+  for (i in seq_len(nrow(filter_columns))) {
+    category <- filter_columns$display_name[i]
+    values <- str_trim(strsplit(filter_columns$available_values[i], ",")[[1]])
+    values <- values[values != "" & !is.na(values)]
     
-    # Add filter columns
-    for (i in seq_len(nrow(filter_columns))) {
-      category <- filter_columns$display_name[i]
-      values <- str_trim(strsplit(filter_columns$available_values[i], ",")[[1]])
-      values <- values[values != "" & !is.na(values)]
-      
-      if (length(values) == 0) next
-      
-      category_node <- list(
-        text = category,
-        id = paste0("category_", node_id_counter),
-        children = lapply(values, function(value) {
-          node_id_counter <<- node_id_counter + 1
-          list(text = value, id = paste0("item_", node_id_counter))
-        })
-      )
-      node_id_counter <- node_id_counter + 1
-      tree_structure <- append(tree_structure, list(category_node))
-    }
-  }
-  
-  # Add Sorting Columns section header
-  if (nrow(sorting_columns) > 0) {
-    sorting_header <- list(
-      text = "SORTING COLUMNS",
-      id = "sorting_header", 
-      type = "header",
-      selectable = FALSE
-    )
-    tree_structure <- append(tree_structure, list(sorting_header))
+    if (length(values) == 0) next
     
-    # Add sorting columns
-    for (i in seq_len(nrow(sorting_columns))) {
-      category <- sorting_columns$display_name[i]
-      values <- str_trim(strsplit(sorting_columns$available_values[i], ",")[[1]])
-      values <- values[values != "" & !is.na(values)]
-      
-      if (length(values) == 0) next
-      
-      category_node <- list(
-        text = category,
-        id = paste0("category_", node_id_counter),
-        children = lapply(values, function(value) {
-          node_id_counter <<- node_id_counter + 1
-          list(text = value, id = paste0("item_", node_id_counter))
-        })
-      )
-      node_id_counter <- node_id_counter + 1
-      tree_structure <- append(tree_structure, list(category_node))
-    }
+    category_node <- list(
+      text = category,
+      id = paste0("filter_category_", node_id_counter),
+      children = lapply(values, function(value) {
+        node_id_counter <<- node_id_counter + 1
+        list(text = value, id = paste0("filter_item_", node_id_counter))
+      })
+    )
+    node_id_counter <- node_id_counter + 1
+    tree_structure <- append(tree_structure, list(category_node))
   }
   
   tree_structure
 }
 
-create_tree_mapping <- function(tree_structure, filter_options) {
+create_sorting_tree <- function(filter_options) {
+  cat("Creating sorting tree structure...\n")
+  
+  tree_structure <- list()
+  node_id_counter <- 1000  # Start with higher numbers to avoid conflicts
+  
+  # Get only sorting columns for the sorting tree
+  sorting_columns <- filter_options[!filter_options$is_filter, ]
+  
+  # Add sorting columns
+  for (i in seq_len(nrow(sorting_columns))) {
+    category <- sorting_columns$display_name[i]
+    values <- str_trim(strsplit(sorting_columns$available_values[i], ",")[[1]])
+    values <- values[values != "" & !is.na(values)]
+    
+    if (length(values) == 0) next
+    
+    category_node <- list(
+      text = category,
+      id = paste0("sorting_category_", node_id_counter),
+      children = lapply(values, function(value) {
+        node_id_counter <<- node_id_counter + 1
+        list(text = value, id = paste0("sorting_item_", node_id_counter))
+      })
+    )
+    node_id_counter <- node_id_counter + 1
+    tree_structure <- append(tree_structure, list(category_node))
+  }
+  
+  tree_structure
+}
+
+# Modified tree mapping function
+create_tree_mapping <- function(filter_tree, sorting_tree, filter_options) {
   mapping <- data.frame(
     node_id = character(0),
     category = character(0),
@@ -269,10 +260,26 @@ create_tree_mapping <- function(tree_structure, filter_options) {
     stringsAsFactors = FALSE
   )
   
-  for (category_node in tree_structure) {
-    # Skip header nodes
-    if (!is.null(category_node$type) && category_node$type == "header") next
-    
+  # Process filter tree
+  for (category_node in filter_tree) {
+    if (!is.null(category_node$children)) {
+      category <- category_node$text
+      is_filter_category <- any(filter_options$display_name == category & filter_options$is_filter)
+      
+      for (child_node in category_node$children) {
+        mapping <- rbind(mapping, data.frame(
+          node_id = child_node$id,
+          category = category,
+          value = child_node$text,
+          is_filter = is_filter_category,
+          stringsAsFactors = FALSE
+        ))
+      }
+    }
+  }
+  
+  # Process sorting tree
+  for (category_node in sorting_tree) {
     if (!is.null(category_node$children)) {
       category <- category_node$text
       is_filter_category <- any(filter_options$display_name == category & filter_options$is_filter)
@@ -305,7 +312,8 @@ filter_configuration <- create_filter_configuration()
 cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
 complete_filter_options <- create_filter_options(cleaned_plant_data, filter_configuration)
 filter_tree_structure <- create_filter_tree(complete_filter_options)
-tree_node_mapping <- create_tree_mapping(filter_tree_structure, complete_filter_options)
+sorting_tree_structure <- create_sorting_tree(complete_filter_options)
+tree_node_mapping <- create_tree_mapping(filter_tree_structure, sorting_tree_structure, complete_filter_options)
 
 cat("Application initialization completed successfully!\n")
 
@@ -318,21 +326,6 @@ ui <- fluidPage(
       href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", 
       rel = "stylesheet"
     ),
-    tags$style(HTML("
-      .tree-header {
-        font-weight: bold;
-        color: #666;
-        font-size: 12px;
-        padding: 10px 5px 5px 5px;
-        border-bottom: 1px solid #ddd;
-        margin-bottom: 5px;
-        background-color: #f8f9fa;
-        letter-spacing: 0.5px;
-      }
-      .tree-header:first-of-type {
-        margin-top: 0;
-      }
-    "))
   ),
   
   useShinyjs(),
@@ -389,8 +382,18 @@ ui <- fluidPage(
                            class = "btn-clear", style = "margin-left: auto;")
               ),
               
-              treeInput("plant_characteristic_tree", label = NULL,
-                choices = filter_tree_structure, returnValue = "id", closeDepth = 0)
+              # Split into two separate sections
+              div(class = "filter-subsection",
+                div(class = "subsection-title", "Filter Preferences (Filters dataset)"),
+                treeInput("filter_tree", label = NULL,
+                  choices = filter_tree_structure, returnValue = "id", closeDepth = 0)
+              ),
+              
+              div(class = "sorting-subsection",
+                div(class = "subsection-title", "Sorting Preferences (match score)"),
+                treeInput("sorting_tree", label = NULL,
+                  choices = sorting_tree_structure, returnValue = "id", closeDepth = 0)
+              )
             )
           )
         )
@@ -425,7 +428,9 @@ server <- function(input, output, session) {
   
   observeEvent(input$clear_all_filters, {
     tryCatch({
-      updateTreeInput(session = session, inputId = "plant_characteristic_tree", 
+      updateTreeInput(session = session, inputId = "filter_tree", 
+                     selected = character(0))
+      updateTreeInput(session = session, inputId = "sorting_tree", 
                      selected = character(0))
       updateNoUiSliderInput(session = session, inputId = "hardiness_zone_range", 
                            value = c(1, 12))
@@ -433,13 +438,15 @@ server <- function(input, output, session) {
   })
   
   # Unified helper functions
-  parse_selected_criteria <- function(selected_ids) {
+  parse_selected_criteria <- function(filter_ids, sorting_ids) {
     filter_criteria <- list()
     sorting_criteria <- list()
     propagation_selected <- FALSE
     
-    if (length(selected_ids) > 0 && nrow(tree_node_mapping) > 0) {
-      for (node_id in selected_ids) {
+    all_selected_ids <- c(filter_ids, sorting_ids)
+    
+    if (length(all_selected_ids) > 0 && nrow(tree_node_mapping) > 0) {
+      for (node_id in all_selected_ids) {
         matching_nodes <- tree_node_mapping[tree_node_mapping$node_id == node_id, ]
         
         if (nrow(matching_nodes) > 0) {
@@ -565,10 +572,13 @@ server <- function(input, output, session) {
       
       if (nrow(climate_suitable_plants) == 0) return(data.frame())
       
-      # Parse criteria
-      selected_filter_ids <- input$plant_characteristic_tree
-      if (is.null(selected_filter_ids)) selected_filter_ids <- character(0)
-      criteria <- parse_selected_criteria(selected_filter_ids)
+      # Parse criteria from both trees
+      filter_ids <- input$filter_tree
+      sorting_ids <- input$sorting_tree
+      if (is.null(filter_ids)) filter_ids <- character(0)
+      if (is.null(sorting_ids)) sorting_ids <- character(0)
+      
+      criteria <- parse_selected_criteria(filter_ids, sorting_ids)
       
       # Apply ALL filter criteria (must match all selected filter categories)
       filtered_plants <- climate_suitable_plants
@@ -607,7 +617,6 @@ server <- function(input, output, session) {
         }
       }
       
-      # Bonus points
       if (!is.null(zone_range) && length(zone_range) == 2 && 
           (zone_range[1] != 1 || zone_range[2] != 12)) {
         filtered_plants$match_score <- filtered_plants$match_score + 1

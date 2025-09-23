@@ -61,7 +61,6 @@ RUN R -e "install.packages(c('leaflet', 'leafpop'), repos='https://cran.rstudio.
 # Install GitHub packages using remotes
 RUN R -e "remotes::install_github('mikejohnson51/AOI')"
 RUN R -e "remotes::install_github('mikejohnson51/climateR')"
-
 # Copy Shiny Server configuration
 COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
 
@@ -72,8 +71,12 @@ COPY nginx/conf.d/default.conf /etc/nginx/nginx.conf
 COPY nginx/html/ /usr/share/nginx/html/
 
 # Copy Shiny apps
-COPY shiny-apps/app1/ /srv/shiny-server/app1/
-COPY shiny-apps/app2/ /srv/shiny-server/app2/
+COPY shiny-apps/plant-selection/ /srv/shiny-server/plant-selection/
+COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
+
+# Copy the shared colors CSS file to both apps
+COPY nginx/html/css/shared-colors.css /srv/shiny-server/plant-selection/www/shared-colors.css
+COPY nginx/html/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
 
 # Create supervisor configuration
 RUN mkdir -p /var/log/supervisor
