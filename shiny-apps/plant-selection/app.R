@@ -11,7 +11,6 @@ library(shinyjs)
 library(data.table)
 
 # Global Configuration ========================================================
-print("Initializing Climate-Smart Plant Selection Application...")
 
 # Constants
 REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")

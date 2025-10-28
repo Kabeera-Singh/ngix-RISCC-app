@@ -4,13 +4,6 @@
 # 
 # A Shiny application for identifying vegetation assemblages that correspond 
 # to current and future climate conditions at locations of interest.
-# 
-# Data source: Petri et al. 2022
-# https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947
-# 
-# Author: [Your Name]
-# Created: [Date]
-# Last Modified: [Date]
 # ============================================================================
 
 # Environment Setup -----------------------------------------------------------
