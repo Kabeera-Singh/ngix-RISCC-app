@@ -75,8 +75,8 @@ COPY shiny-apps/plant-selection/ /srv/shiny-server/plant-selection/
 COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
 
 # Copy the shared colors CSS file to both apps
-COPY nginx/html/css/shared-colors.css /srv/shiny-server/plant-selection/www/shared-colors.css
-COPY nginx/html/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
+COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/plant-selection/www/shared-colors.css
+COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
 
 # Create supervisor configuration
 RUN mkdir -p /var/log/supervisor
