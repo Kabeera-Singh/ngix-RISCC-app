@@ -344,7 +344,8 @@ ui <- fluidPage(
       p(paste(
         "Select your state and desired site and plant characteristics below.",
         "Filter columns must match for plants to appear in results.",
-        "Sorting columns add to the match score to help rank plants by preference."
+        "Sorting columns add to the match score to help rank plants by preference.",
+        "This tool is still under construction. Resulting lists may not be correct. ",
       ))
     ),
     
