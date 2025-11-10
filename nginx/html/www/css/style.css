@@ -244,3 +244,46 @@ footer p {
     grid-template-columns: 1fr;
   }
 }
+/* --- Header tweaks --- */
+.logo {
+  text-decoration: none;
+}
+.logo h1 {
+  line-height: 1.1;
+}
+
+/* Ensure the title text inside the linked logo does not show an underline
+   while keeping the link itself discoverable on hover. */
+.logo h1 {
+  text-decoration: none;       /* prevent underline on the H1 text */
+  display: inline-block;      /* ensure text-decoration can be overridden */
+}
+
+.logo:hover {
+  text-decoration: underline; /* underline the whole link on hover for affordance */
+}
+.logo .subline {
+  font-size: 1.4rem;
+  color: var(--text-secondary);
+}
+
+/* Fix tooltip cutoff */
+.dropdown-menu {
+  white-space: normal; /* allow wrapping */
+}
+
+/* Responsive logo scaling */
+.logo img {
+  max-width: 25%;
+  height: auto;
+}
+
+/* Check for squarish screens */
+@media (max-aspect-ratio: 1/1) {
+  .logo img {
+    height: 90px;
+  }
+  .logo h1 {
+    font-size: 2rem;
+  }
+}
