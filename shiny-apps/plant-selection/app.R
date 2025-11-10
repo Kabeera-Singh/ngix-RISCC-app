@@ -1,5 +1,5 @@
 # ==============================================================================
-# Climate-Smart Plant Selection Application - Fixed Version
+# Climate-Smart Plant Selection Application - State Filter Version
 # ==============================================================================
 
 # Load Required Libraries =====================================================
@@ -34,7 +34,6 @@ load_application_data <- function() {
   cat("Loading application data...\n")
   tryCatch({
     list(
-      hardiness_zones = read.csv("data/state.hz.csv"),
       zipcodes = read.csv("data/zipcodes.csv"),
       plants = read.csv("data/ClimateSmart_Data.csv")
     )
@@ -59,12 +58,12 @@ clean_plant_database <- function(raw_plant_data, filter_config) {
   cat("Cleaning plant database...\n")
   
   raw_plant_data %>%
-    select(Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
+    select(State, Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
            all_of(filter_config$column_name), Propagation.Methods, 
            Propagation.Keywords, Climate.Status) %>%
     filter(!is.na(Hardiness.Zone.Low) & !is.na(Hardiness.Zone.High)) %>%
-    distinct(Scientific.Name, .keep_all = TRUE) %>%
     rename(
+      state = State,
       scientific_name = Scientific.Name,
       common_name = Common.Name,
       min_hardiness_zone = Hardiness.Zone.Low,
@@ -300,12 +299,7 @@ create_tree_mapping <- function(filter_tree, sorting_tree, filter_options) {
 
 # Initialize Application Data =================================================
 app_data <- load_application_data()
-hardiness_zones_data <- app_data$hardiness_zones
 plant_data_raw <- app_data$plants
-
-hardiness_zones_data$state_full_name <- names(STATE_ABBREVIATIONS)[
-  match(hardiness_zones_data$State, STATE_ABBREVIATIONS)
-]
 
 filter_configuration <- create_filter_configuration()
 cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
@@ -345,7 +339,11 @@ ui <- fluidPage(
         "Select your state and desired site and plant characteristics below.",
         "Filter columns must match for plants to appear in results.",
         "Sorting columns add to the match score to help rank plants by preference.",
-        "This tool is still under construction. Resulting lists may not be correct. ",
+        "This tool is still under construction. Resulting lists may not be correct."
+      )),
+      p(paste(
+        "Match score: Each plant earns +1 point for matching a sorting preference.",
+        "The score helps rank plants by how well they fit your desired characteristics."
       ))
     ),
     
@@ -390,7 +388,7 @@ ui <- fluidPage(
               ),
               
               div(class = "sorting-subsection",
-                div(class = "subsection-title", "Sorting Preferences (match score)"),
+                div(class = "subsection-title", "Sorting Preferences (sorts by match score)"),
                 treeInput("sorting_tree", label = NULL,
                   choices = sorting_tree_structure, returnValue = "id", closeDepth = 0)
               )
@@ -552,25 +550,15 @@ server <- function(input, output, session) {
     req(input$selected_state)
     
     tryCatch({
-      # Get climate data
+      # Get state abbreviation
       state_abbreviation <- STATE_ABBREVIATIONS[input$selected_state]
-      future_climate_data <- hardiness_zones_data[
-        hardiness_zones_data$State == state_abbreviation & 
-        hardiness_zones_data$Time_Period == "FutureWorst", 
+      
+      # Filter by state
+      state_plants <- cleaned_plant_data[
+        cleaned_plant_data$state == state_abbreviation, 
       ]
       
-      if (nrow(future_climate_data) == 0) return(data.frame())
-      
-      state_min_zone <- future_climate_data$Zone.Min[1]
-      state_max_zone <- future_climate_data$Zone.Max[1]
-      
-      # Filter by climate suitability
-      climate_suitable_plants <- cleaned_plant_data[
-        cleaned_plant_data$max_hardiness_zone >= state_min_zone & 
-        cleaned_plant_data$min_hardiness_zone <= state_max_zone, 
-      ]
-      
-      if (nrow(climate_suitable_plants) == 0) return(data.frame())
+      if (nrow(state_plants) == 0) return(data.frame())
       
       # Parse criteria from both trees
       filter_ids <- input$filter_tree
@@ -581,7 +569,7 @@ server <- function(input, output, session) {
       criteria <- parse_selected_criteria(filter_ids, sorting_ids)
       
       # Apply ALL filter criteria (must match all selected filter categories)
-      filtered_plants <- climate_suitable_plants
+      filtered_plants <- state_plants
       for (filter_category in names(criteria$filter_criteria)) {
         category_values <- criteria$filter_criteria[[filter_category]]
         column_name <- get_column_name_for_category(filter_category)
@@ -603,6 +591,8 @@ server <- function(input, output, session) {
           ]
         }
       }
+      
+      if (nrow(filtered_plants) == 0) return(data.frame())
       
       # Calculate match scores from sorting criteria
       filtered_plants$match_score <- 0
