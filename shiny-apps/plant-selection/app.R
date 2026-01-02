@@ -3,6 +3,13 @@
 # ==============================================================================
 
 # Load Required Libraries =====================================================
+# These libraries are essential for the application's functionality:
+# - tidyverse: Data manipulation and visualization
+# - shiny: Web application framework
+# - shinyWidgets: Enhanced UI widgets (e.g., treeInput, noUiSliderInput)
+# - DT: Interactive data tables
+# - shinyjs: JavaScript operations in Shiny
+# - data.table: Efficient data handling
 library(tidyverse)
 library(shiny)
 library(shinyWidgets)
@@ -18,13 +25,13 @@ DEFAULT_PAGE_SIZE <- 20
 MAX_MATCH_SCORE <- 5
 DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
 
+# State abbreviations mapping for data filtering
 STATE_ABBREVIATIONS <- c(
   "New York" = "NY", "Connecticut" = "CT", "Rhode Island" = "RI",
   "Massachusetts" = "MA", "New Hampshire" = "NH", "Vermont" = "VT",
   "Maine" = "ME", "Ohio" = "OH", "West Virginia" = "WV",
   "Virginia" = "VA", "Maryland" = "MD", "New Jersey" = "NJ",
-  "Delaware" = "DE", "Pennsylvania" = "PA", "North Carolina" = "NC",
-  "Kentucky" = "KY"
+  "Delaware" = "DE", "Pennsylvania" = "PA", "Kentucky" = "KY"
 )
 
 AVAILABLE_STATES <- names(STATE_ABBREVIATIONS)
@@ -34,8 +41,7 @@ load_application_data <- function() {
   cat("Loading application data...\n")
   tryCatch({
     list(
-      zipcodes = read.csv("data/zipcodes.csv"),
-      plants = read.csv("data/ClimateSmart_Data.csv")
+      plants = read.csv("data/ClimateSmart_Data_Cleaned.csv")
     )
   }, error = function(e) stop(paste("Failed to load data files:", e$message)))
 }
@@ -43,17 +49,22 @@ load_application_data <- function() {
 create_filter_configuration <- function() {
   data.frame(
     column_name = c("Growth.Habit", "Sun.Level", "Moisture.Level", "Soil.Type", 
-                   "Bloom.Period", "Color", "Interesting.Foliage", "Showy", 
+                   "Bloom.Period","max_height", "Color", "Interesting.Foliage", "Showy", 
                    "Garden.Aggressive",  "Wildlife.Services", "Pollinators", 
                    "Climate.Status"),
     display_name = c("Growth Habit", "Sun Level", "Moisture Level", "Soil Type", 
-                    "Bloom Period", "Color", "Interesting Foliage", "Showy", 
+                    "Bloom Period", "Max Height", "Color", "Interesting Foliage", "Showy", 
                     "Garden Aggressive", "Wildlife Services", "Pollinators", 
                     "Climate Status"),
     stringsAsFactors = FALSE
   )
 }
 
+# Clean and preprocess the raw plant database
+# Parameters:
+#   raw_plant_data: Raw data frame from CSV
+#   filter_config: Filter configuration data frame
+# Returns: Cleaned data frame with standardized column names
 clean_plant_database <- function(raw_plant_data, filter_config) {
   cat("Cleaning plant database...\n")
   
@@ -75,12 +86,23 @@ clean_plant_database <- function(raw_plant_data, filter_config) {
 }
 
 # Unified ordering function with switch statement
+# Orders values based on preferred order, placing unmatched values at the end
+# Parameters:
+#   values: Vector of values to order
+#   preferred_order: Vector of preferred order
+# Returns: Ordered vector
 order_by_preference <- function(values, preferred_order) {
   matched_values <- preferred_order[preferred_order %in% values]
   unmatched_values <- sort(values[!values %in% preferred_order])
   c(matched_values, unmatched_values)
 }
 
+# Apply custom ordering based on category
+# Uses predefined preferred orders for different plant characteristics
+# Parameters:
+#   values: Vector of values to order
+#   category: Category name (e.g., "Growth Habit")
+# Returns: Ordered vector of unique values
 apply_custom_ordering <- function(values, category) {
   if (length(values) == 0) return(values)
   
@@ -95,10 +117,11 @@ apply_custom_ordering <- function(values, category) {
     "Bloom Period" = c("January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December",
                       "Indeterminate", "Non-flowering", "Rarely Flowers"),
+    "Max Height" = c("Very Small (0-2 ft)", "Small (2-5 ft)", "Medium (5-10 ft)", "Large (10-20 ft)", "Very Large (20-50 ft)", "Huge (50+ ft)"),
     "Color" = c("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
                "Pink", "Brown", "White", "Not Applicable"),
     "Wildlife Services" = c("Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "None"),
-    # Default ordering
+    # Default ordering for unspecified categories
     {
       special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
       regular_values <- sort(clean_values[!clean_values %in% special_endings])
@@ -111,6 +134,12 @@ apply_custom_ordering <- function(values, category) {
   order_by_preference(clean_values, preferred_order)
 }
 
+# Extract categorical values from a data column
+# Splits comma-separated values and applies custom ordering
+# Parameters:
+#   data: Data frame
+#   column_name: Name of the column to extract values from
+# Returns: Ordered vector of unique values
 extract_categorical_values <- function(data, column_name) {
   if (!column_name %in% names(data)) return(character(0))
   
@@ -124,11 +153,16 @@ extract_categorical_values <- function(data, column_name) {
   apply_custom_ordering(cleaned_values, category)
 }
 
+# Get display name for a column name
+# Maps internal column names to user-friendly display names
+# Parameters:
+#   column_name: Internal column name
+# Returns: Display name string
 get_display_name_for_column <- function(column_name) {
   display_mapping <- c(
     "Growth.Habit" = "Growth Habit", "Sun.Level" = "Sun Level",
     "Moisture.Level" = "Moisture Level", "Soil.Type" = "Soil Type",
-    "Bloom.Period" = "Bloom Period", "Color" = "Color",
+    "Bloom.Period" = "Bloom Period", "max_height" = "Max Height", "Color" = "Color",
     "Interesting.Foliage" = "Interesting Foliage", "Showy" = "Showy",
     "Garden.Aggressive" = "Garden Aggressive", "Wildlife.Services" = "Wildlife Services",
     "Pollinators" = "Pollinators", "Climate.Status" = "Climate Status",
@@ -183,7 +217,62 @@ create_filter_options <- function(plant_data, filter_config) {
   rbind(filter_columns, sorting_columns)
 }
 
-# Modified function to create separate filter and sorting trees
+# Create filter options data frame from plant data
+# Processes all columns to extract available values and categorize as filter or sorting
+# Parameters:
+#   plant_data: Cleaned plant data frame
+#   filter_config: Filter configuration data frame
+# Returns: Data frame with filter options
+create_filter_options <- function(plant_data, filter_config) {
+  cat("Creating filter options...\n")
+  
+  filter_options <- data.frame(
+    column_name = character(0),
+    display_name = character(0),
+    available_values = character(0),
+    is_filter = logical(0),
+    stringsAsFactors = FALSE
+  )
+  
+  # Process all columns including propagation keywords
+  all_columns <- c(filter_config$column_name, "propagation_keywords")
+  all_display_names <- c(filter_config$display_name, "Propagation Keywords")
+  
+  for (i in seq_along(all_columns)) {
+    values <- extract_categorical_values(plant_data, all_columns[i])
+    if (length(values) > 0) {
+      is_filter_column <- all_display_names[i] %in% REQUIRED_FILTER_CATEGORIES
+      filter_options <- rbind(filter_options, data.frame(
+        column_name = all_columns[i],
+        display_name = all_display_names[i],
+        available_values = paste(values, collapse = ","),
+        is_filter = is_filter_column,
+        stringsAsFactors = FALSE
+      ))
+    }
+  }
+  
+  # Separate and order filter and sorting columns
+  filter_columns <- filter_options[filter_options$is_filter, ]
+  sorting_columns <- filter_options[!filter_options$is_filter, ]
+  
+  # Order filter columns by priority
+  filter_priority_order <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
+  filter_columns <- filter_columns[match(filter_priority_order, filter_columns$display_name), ]
+  filter_columns <- filter_columns[!is.na(filter_columns$column_name), ]
+  
+  # Order sorting columns alphabetically
+  sorting_columns <- sorting_columns[order(sorting_columns$display_name), ]
+  
+  # Combine back together
+  rbind(filter_columns, sorting_columns)
+}
+
+# Create filter tree structure for UI
+# Builds hierarchical tree structure for filter categories
+# Parameters:
+#   filter_options: Filter options data frame
+# Returns: List representing tree structure
 create_filter_tree <- function(filter_options) {
   cat("Creating filter tree structure...\n")
   
@@ -193,7 +282,7 @@ create_filter_tree <- function(filter_options) {
   # Get only filter columns for the filter tree
   filter_columns <- filter_options[filter_options$is_filter, ]
   
-  # Add filter columns
+  # Add filter columns as categories with their values as children
   for (i in seq_len(nrow(filter_columns))) {
     category <- filter_columns$display_name[i]
     values <- str_trim(strsplit(filter_columns$available_values[i], ",")[[1]])
@@ -216,6 +305,11 @@ create_filter_tree <- function(filter_options) {
   tree_structure
 }
 
+# Create sorting tree structure for UI
+# Builds hierarchical tree structure for sorting categories
+# Parameters:
+#   filter_options: Filter options data frame
+# Returns: List representing tree structure
 create_sorting_tree <- function(filter_options) {
   cat("Creating sorting tree structure...\n")
   
@@ -225,7 +319,7 @@ create_sorting_tree <- function(filter_options) {
   # Get only sorting columns for the sorting tree
   sorting_columns <- filter_options[!filter_options$is_filter, ]
   
-  # Add sorting columns
+  # Add sorting columns as categories with their values as children
   for (i in seq_len(nrow(sorting_columns))) {
     category <- sorting_columns$display_name[i]
     values <- str_trim(strsplit(sorting_columns$available_values[i], ",")[[1]])
@@ -248,7 +342,13 @@ create_sorting_tree <- function(filter_options) {
   tree_structure
 }
 
-# Modified tree mapping function
+# Create tree node mapping for selected criteria parsing
+# Maps tree node IDs to their corresponding categories and values
+# Parameters:
+#   filter_tree: Filter tree structure
+#   sorting_tree: Sorting tree structure
+#   filter_options: Filter options data frame
+# Returns: Data frame mapping node IDs to categories and values
 create_tree_mapping <- function(filter_tree, sorting_tree, filter_options) {
   mapping <- data.frame(
     node_id = character(0),
@@ -312,6 +412,7 @@ cat("Application initialization completed successfully!\n")
 
 # User Interface Definition ===================================================
 ui <- fluidPage(
+  # Include CSS and JavaScript dependencies
   tags$head(
     tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
     tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
@@ -321,6 +422,7 @@ ui <- fluidPage(
     ),
   ),
   
+  # Enable shinyjs for dynamic UI interactions
   useShinyjs(),
   
   div(class = "app-header",
@@ -380,7 +482,7 @@ ui <- fluidPage(
                            class = "btn-clear", style = "margin-left: auto;")
               ),
               
-              # Split into two separate sections
+              # Split into two separate sections for filters and sorting
               div(class = "filter-subsection",
                 div(class = "subsection-title", "Filter Preferences (Filters dataset)"),
                 treeInput("filter_tree", label = NULL,
@@ -435,7 +537,14 @@ server <- function(input, output, session) {
     }, error = function(e) cat(sprintf("Error clearing filters: %s\n", e$message)))
   })
   
-  # Unified helper functions
+  # Helper Functions for Data Processing ======================================
+  
+  # Parse selected criteria from tree inputs
+  # Converts selected node IDs to filter and sorting criteria
+  # Parameters:
+  #   filter_ids: Selected filter tree node IDs
+  #   sorting_ids: Selected sorting tree node IDs
+  # Returns: List with filter_criteria, sorting_criteria, and propagation_selected
   parse_selected_criteria <- function(filter_ids, sorting_ids) {
     filter_criteria <- list()
     sorting_criteria <- list()
@@ -471,8 +580,13 @@ server <- function(input, output, session) {
     )
   }
   
+  # Get column name for a given category
+  # Maps display category names back to internal column names
+  # Parameters:
+  #   category: Display category name
+  # Returns: Internal column name or NULL if not found
   get_column_name_for_category <- function(category) {
-    column_mapping <- c("Growth Habit" = "Growth.Habit", "Climate Status" = "Climate.Status")
+    column_mapping <- c("Growth Habit" = "Growth.Habit", "Climate Status" = "Climate.Status", "Max Height" = "max_height")
     if (category %in% names(column_mapping)) return(column_mapping[category])
     
     matching_config <- filter_configuration[filter_configuration$display_name == category, ]
@@ -480,6 +594,13 @@ server <- function(input, output, session) {
     NULL
   }
   
+  # Check if plants match category values
+  # Performs exact and substring matching for filter criteria
+  # Parameters:
+  #   plant_data: Plant data frame
+  #   column_name: Column to check
+  #   target_values: Values to match against
+  # Returns: Logical vector indicating matches
   check_category_matches <- function(plant_data, column_name, target_values) {
     if (!column_name %in% names(plant_data)) return(rep(FALSE, nrow(plant_data)))
     
@@ -506,6 +627,13 @@ server <- function(input, output, session) {
     all_matches
   }
   
+  # Count matches for sorting score calculation
+  # Similar to check_category_matches but returns count instead of boolean
+  # Parameters:
+  #   plant_data: Plant data frame
+  #   column_name: Column to check
+  #   target_values: Values to match against
+  # Returns: Numeric vector with match counts
   count_category_matches <- function(plant_data, column_name, target_values) {
     if (!column_name %in% names(plant_data)) return(rep(0, nrow(plant_data)))
     
@@ -532,6 +660,13 @@ server <- function(input, output, session) {
     match_counts
   }
   
+  # Filter plants by category values
+  # Applies filtering logic for a single category
+  # Parameters:
+  #   plant_data: Plant data frame
+  #   column_name: Column to filter on
+  #   target_values: Values to filter by
+  # Returns: Filtered data frame
   filter_by_category_values <- function(plant_data, column_name, target_values) {
     if (length(target_values) == 0 || !column_name %in% names(plant_data)) {
       return(plant_data)
@@ -586,8 +721,8 @@ server <- function(input, output, session) {
       if (!is.null(zone_range) && length(zone_range) == 2) {
         if (zone_range[1] != 1 || zone_range[2] != 12) {
           filtered_plants <- filtered_plants[
-            filtered_plants$min_hardiness_zone <= zone_range[2] & 
-            filtered_plants$max_hardiness_zone >= zone_range[1], 
+            filtered_plants$min_hardiness_zone >= zone_range[1] & 
+            filtered_plants$max_hardiness_zone <= zone_range[2], 
           ]
         }
       }
@@ -666,7 +801,7 @@ server <- function(input, output, session) {
   output$plant_results_table <- DT::renderDataTable({
     tryCatch({
       results <- filtered_plant_list()
-      
+
       if (is.null(results) || nrow(results) == 0) {
         return(datatable(
           data.frame("Message" = "No plants match your criteria. Try adjusting your filters."), 
@@ -674,7 +809,15 @@ server <- function(input, output, session) {
           rownames = FALSE, colnames = ""
         ))
       }
-      
+
+      # Build a safe base filename for downloads: include state abbreviation (if set) and date
+      state_abbr <- if (!is.null(input$selected_state) && input$selected_state %in% names(STATE_ABBREVIATIONS)) {
+        STATE_ABBREVIATIONS[input$selected_state]
+      } else {
+        "ALL"
+      }
+      filename_base <- paste0("ClimateSmart_Plants_", state_abbr, "_", format(Sys.Date(), "%Y%m%d"))
+
       datatable(
         results,
         extensions = 'Buttons',
@@ -688,9 +831,9 @@ server <- function(input, output, session) {
             list(targets = "_all", width = "150px")
           ),
           buttons = list(
-            list(extend = 'csv', text = 'Download CSV'),
-            list(extend = 'excel', text = 'Download Excel'),
-            list(extend = 'pdf', text = 'Download PDF')
+            list(extend = 'csv', text = 'Download CSV', filename = filename_base),
+            list(extend = 'excel', text = 'Download Excel', filename = filename_base),
+            list(extend = 'pdf', text = 'Download PDF', filename = filename_base)
           ),
           responsive = FALSE,
           autoWidth = FALSE,
