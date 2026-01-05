@@ -142,7 +142,7 @@ apply_custom_ordering <- function(values, category) {
     "Max Height" = c("Very Small (0-2 ft)", "Small (2-5 ft)", "Medium (5-10 ft)", "Large (10-20 ft)", "Very Large (20-50 ft)", "Huge (50+ ft)"),
     "Color" = c("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
                "Pink", "Brown", "White", "Not Applicable"),
-    "Wildlife Services" = c("Birds", "Mammals", "Reptiles/Amphibians", "Insects", "NA"),
+    "Wildlife Services" = c("Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "Not Specified"),
     # Default ordering for unspecified categories
     {
       special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
@@ -153,8 +153,8 @@ apply_custom_ordering <- function(values, category) {
     }
   )
   
-  # For Bloom Period, only return values that are in the preferred order list
-  if (category == "Bloom Period") {
+  # For Bloom Period and Wildlife Services, only return values that are in the preferred order list
+  if (category == "Bloom Period" || category == "Wildlife Services") {
     clean_values <- clean_values[clean_values %in% preferred_order]
   }
   
@@ -173,7 +173,7 @@ extract_categorical_values <- function(data, column_name) {
   all_values <- unlist(strsplit(paste(data[[column_name]], collapse = ","), "[,;/]"))
   cleaned_values <- all_values %>%
     str_trim() %>%
-    .[. != "" & !is.na(.) & . != "NA"] %>%
+    .[. != "" & !is.na(.)] %>%
     unique()
   
   category <- get_display_name_for_column(column_name)
