@@ -22,8 +22,30 @@ library(data.table)
 # Constants
 REQUIRED_FILTER_CATEGORIES <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
 DEFAULT_PAGE_SIZE <- 20
-MAX_MATCH_SCORE <- 5
 DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
+
+# Column Tooltips and Descriptions
+COLUMN_TOOLTIPS <- list(
+  "Match Score" = "Percentage of selected sorting criteria matched by this plant. Higher scores indicate better matches to your preferences.",
+  "Scientific Name" = "The official binomial nomenclature (genus and species) of the plant.",
+  "Common Name" = "The widely recognized common or vernacular name of the plant species.",
+  "Min Zone" = "The lowest USDA hardiness zone where this plant can survive winter.",
+  "Max Zone" = "The highest USDA hardiness zone where this plant typically thrives.",
+  "Growth Habit" = "The plant's growth form, such as annual, perennial, shrub, tree, vine, or grass.",
+  "Climate Status" = "Classification indicating how well the plant adapts to climate change scenarios.",
+  "Sun Level" = "Light requirements: Full Sun (6+ hours), Part Shade (3-6 hours), or Full Shade (less than 3 hours).",
+  "Moisture Level" = "Water preference: Dry, Medium, Moist, or Wet soil conditions.",
+  "Soil Type" = "Preferred soil characteristics: Sandy, Loam, Clay, Well-drained, or Moist.",
+  "Bloom Period" = "The month or season when the plant produces flowers.",
+  "Max Height" = "The maximum expected height the plant will reach at maturity.",
+  "Color" = "The predominant color of the plant's flowers or foliage.",
+  "Interesting Foliage" = "Indicates whether the plant has notable foliage characteristics or texture.",
+  "Showy" = "Indicates whether the plant has visually striking or prominent flowers.",
+  "Garden Aggressive" = "Indicates if the plant tends to self-seed or spread aggressively in gardens.",
+  "Wildlife Services" = "Types of wildlife that benefit from this plant (e.g., birds, pollinators, mammals).",
+  "Pollinators" = "Types of pollinators attracted to this plant (e.g., bees, butterflies, hummingbirds).",
+  "Propagation Methods" = "Ways to reproduce the plant: from seed, cuttings, division, or other methods."
+)
 
 # State abbreviations mapping for data filtering
 STATE_ABBREVIATIONS <- c(
@@ -70,7 +92,7 @@ clean_plant_database <- function(raw_plant_data, filter_config) {
   
   raw_plant_data %>%
     select(State, Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
-           all_of(filter_config$column_name), Propagation.Methods, 
+           all_of(intersect(filter_config$column_name, names(.))), Propagation.Methods, 
            Propagation.Keywords, Climate.Status) %>%
     filter(!is.na(Hardiness.Zone.Low) & !is.na(Hardiness.Zone.High)) %>%
     rename(
@@ -116,11 +138,11 @@ apply_custom_ordering <- function(values, category) {
     "Soil Type" = c("Sandy", "Loam", "Clay", "Well-drained", "Moist", "Other", "Not Specified"),
     "Bloom Period" = c("January", "February", "March", "April", "May", "June",
                       "July", "August", "September", "October", "November", "December",
-                      "Indeterminate", "Non-flowering", "Rarely Flowers"),
+                      "Indeterminate", "Non-flowering", "Rarely Flowers", "Not Specified"),
     "Max Height" = c("Very Small (0-2 ft)", "Small (2-5 ft)", "Medium (5-10 ft)", "Large (10-20 ft)", "Very Large (20-50 ft)", "Huge (50+ ft)"),
     "Color" = c("Red", "Orange", "Yellow", "Green", "Blue", "Purple", "Violet", 
                "Pink", "Brown", "White", "Not Applicable"),
-    "Wildlife Services" = c("Birds", "Mammals", "Reptiles", "Amphibians", "Insects", "None"),
+    "Wildlife Services" = c("Birds", "Mammals", "Reptiles/Amphibians", "Insects", "NA"),
     # Default ordering for unspecified categories
     {
       special_endings <- c("Other", "None", "Not Specified", "Not Applicable", "Indeterminate")
@@ -130,6 +152,11 @@ apply_custom_ordering <- function(values, category) {
       return(c(regular_values, special_sorted))
     }
   )
+  
+  # For Bloom Period, only return values that are in the preferred order list
+  if (category == "Bloom Period") {
+    clean_values <- clean_values[clean_values %in% preferred_order]
+  }
   
   order_by_preference(clean_values, preferred_order)
 }
@@ -438,15 +465,15 @@ ui <- fluidPage(
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
       p(paste(
-        "Select your state and desired site and plant characteristics below.",
+        "Select your state and desired plant characteristics.",
         "Filter columns must match for plants to appear in results.",
-        "Sorting columns add to the match score to help rank plants by preference.",
-        "This tool is still under construction. Resulting lists may not be correct."
+        "Sorting columns help rank plants by how well they match your preferences.",
+        "Match score indicates the percentage of selected criteria each plant matches."
       )),
-      p(paste(
-        "Match score: Each plant earns +1 point for matching a sorting preference.",
-        "The score helps rank plants by how well they fit your desired characteristics."
-      ))
+      p(class = "funding-acknowledgement",
+        tags$strong("Funding Acknowledgement:"),
+        " This tool was partially supported by the U.S. Geological Survey's Northeast Climate Adaptation Science Center through grants G23AC00614-00, G22AC00084-02, and G19AC00091 and NSF GRFP No. 1938059."
+      )
     ),
     
     div(class = "main-layout",
@@ -537,7 +564,66 @@ server <- function(input, output, session) {
     }, error = function(e) cat(sprintf("Error clearing filters: %s\n", e$message)))
   })
   
-  # Helper Functions for Data Processing ======================================
+  # Get display name for a column name
+# Maps internal column names to user-friendly display names
+# Parameters:
+#   column_name: Internal column name
+# Returns: Display name string
+get_display_name_for_column <- function(column_name) {
+  display_mapping <- c(
+    "Growth.Habit" = "Growth Habit", "Sun.Level" = "Sun Level",
+    "Moisture.Level" = "Moisture Level", "Soil.Type" = "Soil Type",
+    "Bloom.Period" = "Bloom Period", "max_height" = "Max Height", "Color" = "Color",
+    "Interesting.Foliage" = "Interesting Foliage", "Showy" = "Showy",
+    "Garden.Aggressive" = "Garden Aggressive", "Wildlife.Services" = "Wildlife Services",
+    "Pollinators" = "Pollinators", "Climate.Status" = "Climate Status",
+    "propagation_keywords" = "Propagation Keywords",
+    "propagation_methods" = "Propagation Methods"
+  )
+  
+  ifelse(column_name %in% names(display_mapping), display_mapping[column_name], column_name)
+}
+
+# Get tooltip for a column name
+# Returns the descriptive tooltip for a column
+# Parameters:
+#   column_name: Column name to get tooltip for
+# Returns: Tooltip string or empty string if not found
+get_column_tooltip <- function(column_name) {
+  tooltip <- COLUMN_TOOLTIPS[[column_name]]
+  if (is.null(tooltip)) return("")
+  tooltip
+}
+
+# Helper Functions for Data Processing ======================================
+  
+  # Helper function to expand bloom period ranges
+  # Converts month ranges (e.g., "January, March") to full month lists
+  # Parameters:
+  #   bloom_str: Bloom period string (comma-separated months)
+  # Returns: Vector of individual months or ranges expanded
+  expand_bloom_period <- function(bloom_str) {
+    months <- c("January", "February", "March", "April", "May", "June", 
+                "July", "August", "September", "October", "November", "December")
+    parts <- str_trim(strsplit(as.character(bloom_str), "-")[[1]])
+    expanded <- c()
+    
+    if (length(parts) == 2) {
+      # Assume two parts indicate a range (e.g., "January, March" = Jan, Feb, Mar)
+      start <- match(parts[1], months)
+      end <- match(parts[2], months)
+      if (!is.na(start) && !is.na(end) && start <= end) {
+        expanded <- months[start:end]
+      } else {
+        expanded <- parts  # Fallback if not a valid range
+      }
+    } else {
+      # Single month or multiple non-range months
+      expanded <- parts
+    }
+    
+    unique(expanded)
+  }
   
   # Parse selected criteria from tree inputs
   # Converts selected node IDs to filter and sorting criteria
@@ -596,6 +682,7 @@ server <- function(input, output, session) {
   
   # Check if plants match category values
   # Performs exact and substring matching for filter criteria
+  # For Bloom.Period, expands ranges to handle month ranges
   # Parameters:
   #   plant_data: Plant data frame
   #   column_name: Column to check
@@ -604,23 +691,29 @@ server <- function(input, output, session) {
   check_category_matches <- function(plant_data, column_name, target_values) {
     if (!column_name %in% names(plant_data)) return(rep(FALSE, nrow(plant_data)))
     
-    column_values <- as.character(plant_data[[column_name]])
-    column_values[is.na(column_values)] <- ""
-    
-    all_matches <- rep(FALSE, length(column_values))
+    all_matches <- rep(FALSE, nrow(plant_data))
     
     for (target_value in target_values) {
       if (is.na(target_value) || target_value == "") next
       
-      escaped_target <- gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", target_value)
-      exact_matches <- grepl(paste0("\\b", escaped_target, "\\b"), 
-                           column_values, ignore.case = TRUE)
-      
-      if (!any(exact_matches, na.rm = TRUE)) {
-        substring_matches <- grepl(escaped_target, column_values, ignore.case = TRUE)
-        all_matches <- all_matches | substring_matches
-      } else {
-        all_matches <- all_matches | exact_matches
+      for (i in seq_len(nrow(plant_data))) {
+        plant_value <- as.character(plant_data[[column_name]][i])
+        if (is.na(plant_value) || plant_value == "") next
+        
+        if (column_name == "Bloom.Period") {
+          # For bloom period, expand ranges and check if target month is in the range
+          expanded_months <- expand_bloom_period(plant_value)
+          if (any(tolower(expanded_months) == tolower(target_value))) {
+            all_matches[i] <- TRUE
+          }
+        } else {
+          # For other columns, split by common delimiters and check each part
+          plant_values <- str_trim(strsplit(plant_value, "[,;/]")[[1]])
+          # Check for exact match (case-insensitive) with any of the split values
+          if (any(tolower(plant_values) == tolower(target_value))) {
+            all_matches[i] <- TRUE
+          }
+        }
       }
     }
     
@@ -629,6 +722,7 @@ server <- function(input, output, session) {
   
   # Count matches for sorting score calculation
   # Similar to check_category_matches but returns count instead of boolean
+  # For Bloom.Period, expands ranges to handle month ranges
   # Parameters:
   #   plant_data: Plant data frame
   #   column_name: Column to check
@@ -637,23 +731,29 @@ server <- function(input, output, session) {
   count_category_matches <- function(plant_data, column_name, target_values) {
     if (!column_name %in% names(plant_data)) return(rep(0, nrow(plant_data)))
     
-    column_values <- as.character(plant_data[[column_name]])
-    column_values[is.na(column_values)] <- ""
-    
-    match_counts <- rep(0, length(column_values))
+    match_counts <- rep(0, nrow(plant_data))
     
     for (target_value in target_values) {
       if (is.na(target_value) || target_value == "") next
       
-      escaped_target <- gsub("([.*+?^${}()|\\[\\]\\\\])", "\\\\\\1", target_value)
-      exact_matches <- grepl(paste0("\\b", escaped_target, "\\b"), 
-                           column_values, ignore.case = TRUE)
-      
-      if (!any(exact_matches, na.rm = TRUE)) {
-        substring_matches <- grepl(escaped_target, column_values, ignore.case = TRUE)
-        match_counts <- match_counts + as.numeric(substring_matches)
-      } else {
-        match_counts <- match_counts + as.numeric(exact_matches)
+      for (i in seq_len(nrow(plant_data))) {
+        plant_value <- as.character(plant_data[[column_name]][i])
+        if (is.na(plant_value) || plant_value == "") next
+        
+        if (column_name == "Bloom.Period") {
+          # For bloom period, expand ranges and check if target month is in the range
+          expanded_months <- expand_bloom_period(plant_value)
+          if (any(tolower(expanded_months) == tolower(target_value))) {
+            match_counts[i] <- match_counts[i] + 1
+          }
+        } else {
+          # For other columns, split by common delimiters and check each part
+          plant_values <- str_trim(strsplit(plant_value, "[,;/]")[[1]])
+          # Check for exact match (case-insensitive) with any of the split values
+          if (any(tolower(plant_values) == tolower(target_value))) {
+            match_counts[i] <- match_counts[i] + 1
+          }
+        }
       }
     }
     
@@ -731,14 +831,37 @@ server <- function(input, output, session) {
       
       # Calculate match scores from sorting criteria
       filtered_plants$match_score <- 0
+      total_possible_points <- 0
       
+      # Count total possible points from sorting criteria
+      for (sorting_category in names(criteria$sorting_criteria)) {
+        total_possible_points <- total_possible_points + 1
+      }
+      
+      # Add possible points for hardiness zone and propagation
+      if (!is.null(zone_range) && length(zone_range) == 2 && 
+          (zone_range[1] != 1 || zone_range[2] != 12)) {
+        total_possible_points <- total_possible_points + 1
+      }
+      
+      if (criteria$propagation_selected) {
+        total_possible_points <- total_possible_points + 1
+      }
+      
+      # Set minimum of 1 to avoid division by zero
+      if (total_possible_points == 0) {
+        total_possible_points <- 1
+      }
+      
+      # Calculate match score - each category that matches contributes 1 point
       for (sorting_category in names(criteria$sorting_criteria)) {
         category_values <- criteria$sorting_criteria[[sorting_category]]
         column_name <- get_column_name_for_category(sorting_category)
         
         if (!is.null(column_name) && column_name %in% names(filtered_plants)) {
-          match_counts <- count_category_matches(filtered_plants, column_name, category_values)
-          filtered_plants$match_score <- filtered_plants$match_score + match_counts
+          # Check if each plant matches ANY value in this category (0 or 1 point per category)
+          matches <- check_category_matches(filtered_plants, column_name, category_values)
+          filtered_plants$match_score <- filtered_plants$match_score + as.numeric(matches)
         }
       }
       
@@ -751,7 +874,10 @@ server <- function(input, output, session) {
         filtered_plants$match_score <- filtered_plants$match_score + 1
       }
       
-      # Prepare results table
+      # Convert raw score to percentage out of 100, capped at 100%
+      filtered_plants$match_score <- pmin(round((filtered_plants$match_score / total_possible_points) * 100), 100)
+      
+      # Prepare results table with metadata for tooltips
       results <- data.frame(
         "Match Score" = filtered_plants$match_score,
         "Scientific Name" = filtered_plants$scientific_name,
@@ -761,6 +887,9 @@ server <- function(input, output, session) {
         stringsAsFactors = FALSE,
         check.names = FALSE
       )
+      
+      # Store column order for reference
+      attr(results, 'column_order') <- names(results)
       
       # Add selected characteristic columns
       all_selected_categories <- c(names(criteria$filter_criteria), names(criteria$sorting_criteria))
@@ -782,7 +911,9 @@ server <- function(input, output, session) {
       }
       
       # Sort results
-      results[order(-results$`Match Score`, results$`Scientific Name`), ]
+      sorted_results <- results[order(-results$`Match Score`, results$`Scientific Name`), ]
+      attr(sorted_results, 'column_order') <- attr(results, 'column_order')
+      sorted_results
       
     }, error = function(e) {
       cat(sprintf("Error in filtered_plant_list: %s\n", e$message))
@@ -818,22 +949,43 @@ server <- function(input, output, session) {
       }
       filename_base <- paste0("ClimateSmart_Plants_", state_abbr, "_", format(Sys.Date(), "%Y%m%d"))
 
-      datatable(
+      # Create column definitions with proper widths and alignment
+      column_defs <- list(
+        list(targets = 0, width = "90px", className = "dt-center dt-match-score"),
+        list(targets = 1, width = "180px", className = "dt-left"),
+        list(targets = 2, width = "180px", className = "dt-left"),
+        list(targets = 3, width = "75px", className = "dt-center"),
+        list(targets = 4, width = "75px", className = "dt-center"),
+        list(targets = "_all", width = "140px")
+      )
+      
+      # Generate tooltip data structure
+      col_tooltips_js <- paste(
+        sprintf('"%s": "%s"', 
+               colnames(results),
+               sapply(colnames(results), function(col) {
+                 tooltip <- get_column_tooltip(col)
+                 # Escape special characters for JavaScript
+                 gsub('"', '\\"', gsub('\n', ' ', tooltip))
+               })),
+        collapse = ", "
+      )
+      
+      dt_table <- datatable(
         results,
         extensions = 'Buttons',
         options = list(
-          dom = 'Bfrtip',
+          dom = '<"dt-top-controls"Bfr>t<"dt-bottom-controls"ip>',
           pageLength = DEFAULT_PAGE_SIZE,
           scrollX = TRUE,
-          columnDefs = list(
-            list(targets = 3, width = "80px", className = "dt-center"),
-            list(targets = 4, width = "80px", className = "dt-center"),
-            list(targets = "_all", width = "150px")
-          ),
+          columnDefs = column_defs,
           buttons = list(
-            list(extend = 'csv', text = 'Download CSV', filename = filename_base),
-            list(extend = 'excel', text = 'Download Excel', filename = filename_base),
-            list(extend = 'pdf', text = 'Download PDF', filename = filename_base)
+            list(extend = 'csv', text = '<i class="fas fa-download"></i> CSV', 
+                 filename = filename_base, className = 'btn-csv'),
+            list(extend = 'excel', text = '<i class="fas fa-download"></i> Excel', 
+                 filename = filename_base, className = 'btn-excel'),
+            list(extend = 'pdf', text = '<i class="fas fa-download"></i> PDF', 
+                 filename = filename_base, className = 'btn-pdf')
           ),
           responsive = FALSE,
           autoWidth = FALSE,
@@ -843,26 +995,83 @@ server <- function(input, output, session) {
           paging = FALSE,
           order = list(list(0, 'desc'), list(1, 'asc')),
           deferRender = TRUE,
-          processing = TRUE
+          processing = TRUE,
+          initComplete = DT::JS(
+            "function(settings, json) {",
+            "  var api = this.api();",
+            "  var headers = api.columns().header();",
+            "  var tooltips = {", col_tooltips_js, "};",
+            "  $(headers).each(function(i) {",
+            "    var headerText = $(this).text().trim();",
+            "    var tooltip = tooltips[headerText];",
+            "    if (tooltip && tooltip.length > 0) {",
+            "      $(this).attr('title', tooltip).addClass('header-with-tooltip');",
+            "      $(this).css({'cursor': 'help', 'border-bottom': '2px dotted rgba(76, 175, 80, 0.5)'});",
+            "      $(this).on('mouseenter', function() {",
+            "        var $tooltip = $('<div class=\"header-tooltip-popup\"></div>');",
+            "        $tooltip.text(tooltip);",
+            "        $('body').append($tooltip);",
+            "        $tooltip.css({",
+            "          'position': 'fixed',",
+            "          'z-index': '9999',",
+            "          'max-width': '300px',",
+            "          'background': '#2c3e50',",
+            "          'color': 'white',",
+            "          'padding': '10px 12px',",
+            "          'border-radius': '4px',",
+            "          'font-size': '12px',",
+            "          'line-height': '1.4',",
+            "          'box-shadow': '0 4px 12px rgba(0, 0, 0, 0.3)',",
+            "          'pointer-events': 'none'",
+            "        });",
+            "        var offset = $(this).offset();",
+            "        var tooltipWidth = $tooltip.outerWidth();",
+            "        var headerWidth = $(this).outerWidth();",
+            "        var tooltipHeight = $tooltip.outerHeight();",
+            "        $tooltip.css({",
+            "          'left': (offset.left + headerWidth / 2 - tooltipWidth / 2) + 'px',",
+            "          'top': (offset.top - tooltipHeight - 12) + 'px'",
+            "        });",
+            "      });",
+            "      $(this).on('mouseleave', function() {",
+            "        $('.header-tooltip-popup').remove();",
+            "      });",
+            "    }",
+            "  });",
+            "}"
+          )
         ),
         rownames = FALSE,
-        class = 'table-hover table-striped compact',
+        class = 'table-modern stripe hover compact',
         style = 'bootstrap4'
       ) %>%
         formatStyle(
           'Match Score',
           backgroundColor = styleInterval(
-            cuts = seq(1, MAX_MATCH_SCORE),
-            values = c('#ffffff', '#e8f5e9', '#c8e6c9', '#a5d6a7', '#81c784', '#66bb6a')
+            cuts = c(20, 40, 60, 80),
+            values = c('#f5f5f5', '#e8f5e9', '#c8e6c9', '#a5d6a7', '#81c784')
           ),
           fontWeight = 'bold',
-          textAlign = 'center'
+          textAlign = 'center',
+          color = styleInterval(
+            cuts = c(50),
+            values = c('#555555', '#1b5e20')
+          )
         ) %>%
         formatStyle(
           c('Min Zone', 'Max Zone'),
           textAlign = 'center',
-          fontWeight = '500'
+          fontWeight = '500',
+          backgroundColor = '#f8f9fa',
+          borderRight = '1px solid #dee2e6'
+        ) %>%
+        formatStyle(
+          'Scientific Name',
+          fontStyle = 'italic',
+          color = '#2c3e50'
         )
+      
+      dt_table
         
     }, error = function(e) {
       datatable(
