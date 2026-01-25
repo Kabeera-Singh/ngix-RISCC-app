@@ -61,26 +61,20 @@ RUN R -e "install.packages(c('leaflet', 'leafpop'), repos='https://cran.rstudio.
 # Install GitHub packages using remotes
 RUN R -e "remotes::install_github('mikejohnson51/AOI')"
 RUN R -e "remotes::install_github('mikejohnson51/climateR')"
-# Copy Shiny Server configuration
+
+# Copy configurations first
 COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
-
-# Copy nginx configuration
 COPY nginx/conf.d/default.conf /etc/nginx/nginx.conf
+COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Copy HTML files
+# Copy HTML and CSS
 COPY nginx/html/ /usr/share/nginx/html/
-
-# Copy Shiny apps
-COPY shiny-apps/plant-selection/ /srv/shiny-server/plant-selection/
-COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
-
-# Copy the shared colors CSS file to both apps
 COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/plant-selection/www/shared-colors.css
 COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
 
-# Create supervisor configuration
-RUN mkdir -p /var/log/supervisor
-COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
+# Copy apps LAST
+COPY shiny-apps/plant-selection/ /srv/shiny-server/plant-selection/
+COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
 
 # Set proper permissions
 RUN chown -R shiny:shiny /srv/shiny-server/ && \
@@ -89,8 +83,5 @@ RUN chown -R shiny:shiny /srv/shiny-server/ && \
     touch /var/log/nginx/access.log /var/log/nginx/error.log && \
     chown www-data:www-data /var/log/nginx/*
 
-# Expose port 80 (nginx will handle routing)
 EXPOSE 80
-
-# Use supervisor to run both nginx and shiny-server
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
