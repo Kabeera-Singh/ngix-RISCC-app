@@ -104,7 +104,10 @@ clean_plant_database <- function(raw_plant_data, filter_config) {
       propagation_methods = Propagation.Methods,
       propagation_keywords = Propagation.Keywords
     ) %>%
-    mutate(match_score = 0)
+    mutate(
+      match_score = 0,
+      hardiness_zone_numeric = min_hardiness_zone
+    )
 }
 
 # Unified ordering function with switch statement
@@ -130,6 +133,12 @@ apply_custom_ordering <- function(values, category) {
   
   clean_values <- unique(values[!is.na(values) & values != "" & values != "NA"])
   if (length(clean_values) == 0) return(character(0))
+  
+  # Special handling for Hardiness Zone - numeric ordering
+  if (category == "Hardiness Zone") {
+    numeric_values <- as.numeric(clean_values)
+    return(as.character(sort(numeric_values)))
+  }
   
   preferred_order <- switch(category,
     "Growth Habit" = c("Annual", "Perennial Herb", "Grass", "Fern", "Vine", "Shrub", "Tree", "Other"),
@@ -193,7 +202,8 @@ get_display_name_for_column <- function(column_name) {
     "Interesting.Foliage" = "Interesting Foliage", "Showy" = "Showy",
     "Garden.Aggressive" = "Garden Aggressive", "Wildlife.Services" = "Wildlife Services",
     "Pollinators" = "Pollinators", "Climate.Status" = "Climate Status",
-    "propagation_keywords" = "Propagation Keywords"
+    "propagation_keywords" = "Propagation Keywords",
+    "hardiness_zone_numeric" = "Hardiness Zone"
   )
   
   ifelse(column_name %in% names(display_mapping), display_mapping[column_name], column_name)
@@ -210,12 +220,18 @@ create_filter_options <- function(plant_data, filter_config) {
     stringsAsFactors = FALSE
   )
   
-  # Process all columns
-  all_columns <- c(filter_config$column_name, "propagation_keywords")
-  all_display_names <- c(filter_config$display_name, "Propagation Keywords")
+  # Process all columns including hardiness zone
+  all_columns <- c(filter_config$column_name, "propagation_keywords", "hardiness_zone_numeric")
+  all_display_names <- c(filter_config$display_name, "Propagation Keywords", "Hardiness Zone")
   
   for (i in seq_along(all_columns)) {
-    values <- extract_categorical_values(plant_data, all_columns[i])
+    # Special handling for hardiness zone
+    if (all_columns[i] == "hardiness_zone_numeric") {
+      values <- as.character(1:12)
+    } else {
+      values <- extract_categorical_values(plant_data, all_columns[i])
+    }
+    
     if (length(values) > 0) {
       is_filter_column <- all_display_names[i] %in% REQUIRED_FILTER_CATEGORIES
       filter_options <- rbind(filter_options, data.frame(
@@ -237,64 +253,20 @@ create_filter_options <- function(plant_data, filter_config) {
   filter_columns <- filter_columns[match(filter_priority_order, filter_columns$display_name), ]
   filter_columns <- filter_columns[!is.na(filter_columns$column_name), ]
   
-  # Order sorting columns alphabetically
-  sorting_columns <- sorting_columns[order(sorting_columns$display_name), ]
+  # Order sorting columns by priority, then alphabetically
+  sorting_priority_order <- c("Hardiness Zone")
+  sorting_columns_priority <- sorting_columns[sorting_columns$display_name %in% sorting_priority_order, ]
+  sorting_columns_priority <- sorting_columns_priority[match(sorting_priority_order, sorting_columns_priority$display_name), ]
+  sorting_columns_priority <- sorting_columns_priority[!is.na(sorting_columns_priority$column_name), ]
+  
+  sorting_columns_remaining <- sorting_columns[!sorting_columns$display_name %in% sorting_priority_order, ]
+  sorting_columns_remaining <- sorting_columns_remaining[order(sorting_columns_remaining$display_name), ]
+  
+  sorting_columns <- rbind(sorting_columns_priority, sorting_columns_remaining)
   
   # Combine back together
   rbind(filter_columns, sorting_columns)
 }
-
-# Create filter options data frame from plant data
-# Processes all columns to extract available values and categorize as filter or sorting
-# Parameters:
-#   plant_data: Cleaned plant data frame
-#   filter_config: Filter configuration data frame
-# Returns: Data frame with filter options
-create_filter_options <- function(plant_data, filter_config) {
-  cat("Creating filter options...\n")
-  
-  filter_options <- data.frame(
-    column_name = character(0),
-    display_name = character(0),
-    available_values = character(0),
-    is_filter = logical(0),
-    stringsAsFactors = FALSE
-  )
-  
-  # Process all columns including propagation keywords
-  all_columns <- c(filter_config$column_name, "propagation_keywords")
-  all_display_names <- c(filter_config$display_name, "Propagation Keywords")
-  
-  for (i in seq_along(all_columns)) {
-    values <- extract_categorical_values(plant_data, all_columns[i])
-    if (length(values) > 0) {
-      is_filter_column <- all_display_names[i] %in% REQUIRED_FILTER_CATEGORIES
-      filter_options <- rbind(filter_options, data.frame(
-        column_name = all_columns[i],
-        display_name = all_display_names[i],
-        available_values = paste(values, collapse = ","),
-        is_filter = is_filter_column,
-        stringsAsFactors = FALSE
-      ))
-    }
-  }
-  
-  # Separate and order filter and sorting columns
-  filter_columns <- filter_options[filter_options$is_filter, ]
-  sorting_columns <- filter_options[!filter_options$is_filter, ]
-  
-  # Order filter columns by priority
-  filter_priority_order <- c("Growth Habit", "Climate Status", "Sun Level", "Moisture Level")
-  filter_columns <- filter_columns[match(filter_priority_order, filter_columns$display_name), ]
-  filter_columns <- filter_columns[!is.na(filter_columns$column_name), ]
-  
-  # Order sorting columns alphabetically
-  sorting_columns <- sorting_columns[order(sorting_columns$display_name), ]
-  
-  # Combine back together
-  rbind(filter_columns, sorting_columns)
-}
-
 # Create filter tree structure for UI
 # Builds hierarchical tree structure for filter categories
 # Parameters:
@@ -491,15 +463,7 @@ ui <- fluidPage(
                 choices = c(selected = NULL, AVAILABLE_STATES), width = "100%")
             ),
             
-            div(class = "form-group",
-              tags$label(`for` = "hardiness_zone_range",
-                tags$i(class = "fas fa-thermometer-half"), " Hardiness Zone Range"
-              ),
-              noUiSliderInput("hardiness_zone_range", label = NULL,
-                min = 1, max = 12, value = c(1, 12), connect = TRUE, step = 1,
-                tooltips = TRUE, format = wNumbFormat(decimals = 0), width = "95%")
-            ),
-            
+
             div(class = "characteristics-section",
               div(class = "characteristics-header",
                 h6(class = "characteristics-title",
@@ -559,8 +523,6 @@ server <- function(input, output, session) {
                      selected = character(0))
       updateTreeInput(session = session, inputId = "sorting_tree", 
                      selected = character(0))
-      updateNoUiSliderInput(session = session, inputId = "hardiness_zone_range", 
-                           value = c(1, 12))
     }, error = function(e) cat(sprintf("Error clearing filters: %s\n", e$message)))
   })
   
@@ -672,7 +634,7 @@ get_column_tooltip <- function(column_name) {
   #   category: Display category name
   # Returns: Internal column name or NULL if not found
   get_column_name_for_category <- function(category) {
-    column_mapping <- c("Growth Habit" = "Growth.Habit", "Climate Status" = "Climate.Status", "Max Height" = "max_height")
+    column_mapping <- c("Growth Habit" = "Growth.Habit", "Climate Status" = "Climate.Status", "Max Height" = "max_height", "Hardiness Zone" = "hardiness_zone_numeric")
     if (category %in% names(column_mapping)) return(column_mapping[category])
     
     matching_config <- filter_configuration[filter_configuration$display_name == category, ]
@@ -683,6 +645,7 @@ get_column_tooltip <- function(column_name) {
   # Check if plants match category values
   # Performs exact and substring matching for filter criteria
   # For Bloom.Period, expands ranges to handle month ranges
+  # For Hardiness Zone, checks if selected zone falls within plant's zone range
   # Parameters:
   #   plant_data: Plant data frame
   #   column_name: Column to check
@@ -700,7 +663,17 @@ get_column_tooltip <- function(column_name) {
         plant_value <- as.character(plant_data[[column_name]][i])
         if (is.na(plant_value) || plant_value == "") next
         
-        if (column_name == "Bloom.Period") {
+        if (column_name == "hardiness_zone_numeric") {
+          # For hardiness zone, check if selected zone is within plant's min/max range
+          target_zone <- as.numeric(target_value)
+          plant_min <- plant_data$min_hardiness_zone[i]
+          plant_max <- plant_data$max_hardiness_zone[i]
+          if (!is.na(target_zone) && !is.na(plant_min) && !is.na(plant_max)) {
+            if (target_zone >= plant_min && target_zone <= plant_max) {
+              all_matches[i] <- TRUE
+            }
+          }
+        } else if (column_name == "Bloom.Period") {
           # For bloom period, expand ranges and check if target month is in the range
           expanded_months <- expand_bloom_period(plant_value)
           if (any(tolower(expanded_months) == tolower(target_value))) {
@@ -723,6 +696,7 @@ get_column_tooltip <- function(column_name) {
   # Count matches for sorting score calculation
   # Similar to check_category_matches but returns count instead of boolean
   # For Bloom.Period, expands ranges to handle month ranges
+  # For Hardiness Zone, checks if selected zone falls within plant's zone range
   # Parameters:
   #   plant_data: Plant data frame
   #   column_name: Column to check
@@ -740,7 +714,17 @@ get_column_tooltip <- function(column_name) {
         plant_value <- as.character(plant_data[[column_name]][i])
         if (is.na(plant_value) || plant_value == "") next
         
-        if (column_name == "Bloom.Period") {
+        if (column_name == "hardiness_zone_numeric") {
+          # For hardiness zone, check if selected zone is within plant's min/max range
+          target_zone <- as.numeric(target_value)
+          plant_min <- plant_data$min_hardiness_zone[i]
+          plant_max <- plant_data$max_hardiness_zone[i]
+          if (!is.na(target_zone) && !is.na(plant_min) && !is.na(plant_max)) {
+            if (target_zone >= plant_min && target_zone <= plant_max) {
+              match_counts[i] <- match_counts[i] + 1
+            }
+          }
+        } else if (column_name == "Bloom.Period") {
           # For bloom period, expand ranges and check if target month is in the range
           expanded_months <- expand_bloom_period(plant_value)
           if (any(tolower(expanded_months) == tolower(target_value))) {
@@ -816,19 +800,6 @@ get_column_tooltip <- function(column_name) {
       
       if (nrow(filtered_plants) == 0) return(data.frame())
       
-      # Apply hardiness zone range filter
-      zone_range <- input$hardiness_zone_range
-      if (!is.null(zone_range) && length(zone_range) == 2) {
-        if (zone_range[1] != 1 || zone_range[2] != 12) {
-          filtered_plants <- filtered_plants[
-            filtered_plants$min_hardiness_zone >= zone_range[1] & 
-            filtered_plants$max_hardiness_zone <= zone_range[2], 
-          ]
-        }
-      }
-      
-      if (nrow(filtered_plants) == 0) return(data.frame())
-      
       # Calculate match scores from sorting criteria
       filtered_plants$match_score <- 0
       total_possible_points <- 0
@@ -838,12 +809,7 @@ get_column_tooltip <- function(column_name) {
         total_possible_points <- total_possible_points + 1
       }
       
-      # Add possible points for hardiness zone and propagation
-      if (!is.null(zone_range) && length(zone_range) == 2 && 
-          (zone_range[1] != 1 || zone_range[2] != 12)) {
-        total_possible_points <- total_possible_points + 1
-      }
-      
+      # Add possible points for propagation
       if (criteria$propagation_selected) {
         total_possible_points <- total_possible_points + 1
       }
@@ -863,11 +829,6 @@ get_column_tooltip <- function(column_name) {
           matches <- check_category_matches(filtered_plants, column_name, category_values)
           filtered_plants$match_score <- filtered_plants$match_score + as.numeric(matches)
         }
-      }
-      
-      if (!is.null(zone_range) && length(zone_range) == 2 && 
-          (zone_range[1] != 1 || zone_range[2] != 12)) {
-        filtered_plants$match_score <- filtered_plants$match_score + 1
       }
       
       if (criteria$propagation_selected) {
