@@ -20,8 +20,8 @@ script_dir <- if (exists("Rscript")) {
 }
 if (basename(script_dir) == "scripts") {
   setwd(dirname(script_dir))
-} else if (!file.exists("data/ClimateSmart_Data_Cleaned.csv")) {
-  stop("Run from plant-selection directory or ensure data/ClimateSmart_Data_Cleaned.csv exists")
+} else if (!file.exists("shiny-apps/plant-selection/data/ClimateSmart_Data_Cleaned.csv")) {
+  stop("Run from plant-selection directory or ensure shiny-apps/plant-selection/data/ClimateSmart_Data_Cleaned.csv exists")
 }
 
 # Constants (must match app.R)
@@ -257,7 +257,7 @@ create_tree_mapping <- function(filter_tree, sorting_tree, filter_options) {
 
 # Main execution
 message("Loading ClimateSmart_Data_Cleaned.csv...")
-plants <- data.table::fread("data/ClimateSmart_Data_Cleaned.csv")
+plants <- data.table::fread("shiny-apps/plant-selection/data/ClimateSmart_Data_Cleaned.csv")
 for (old_name in names(CSV_TO_INTERNAL_NAMES)) {
   if (old_name %in% names(plants)) {
     data.table::setnames(plants, old_name, CSV_TO_INTERNAL_NAMES[old_name])
@@ -296,11 +296,11 @@ if ("Bloom.Period" %in% names(cleaned)) {
 cleaned_dt <- as.data.table(cleaned)
 
 # Save full prepared data
-message("Saving data/plants_prepared.rds...")
-saveRDS(cleaned_dt, "data/plants_prepared.rds")
+message("Saving shiny-apps/plant-selection/data/plants_prepared.rds...")
+saveRDS(cleaned_dt, "shiny-apps/plant-selection/data/plants_prepared.rds")
 
 # Split by state and save
-dir.create("data/plants_by_state", showWarnings = FALSE, recursive = TRUE)
+dir.create("shiny-apps/plant-selection/data/plants_by_state", showWarnings = FALSE, recursive = TRUE)
 states <- unique(cleaned_dt$state)
 for (st in states) {
   if (!is.na(st) && nchar(st) > 0) {
@@ -308,7 +308,7 @@ for (st in states) {
     saveRDS(state_subset, file.path("data", "plants_by_state", paste0(st, ".rds")))
   }
 }
-message("Saved ", length(states), " state files to data/plants_by_state/")
+message("Saved ", length(states), " state files to shiny-apps/plant-selection/data/plants_by_state/")
 
 # Create filter options
 message("Creating filter options...")
@@ -323,7 +323,16 @@ filter_options_bundle <- list(
   sorting_tree_structure = sorting_tree_structure,
   tree_node_mapping = tree_node_mapping
 )
-message("Saving data/filter_options.rds...")
-saveRDS(filter_options_bundle, "data/filter_options.rds")
+message("Saving shiny-apps/plant-selection/data/filter_options.rds...")
+saveRDS(filter_options_bundle, "shiny-apps/plant-selection/data/filter_options.rds")
 
 message("Done. Run the plant-selection app to use pre-computed data.")
+
+
+Loading ClimateSmart_Data_Cleaned.csv...
+Pre-expanding bloom periods...
+Saving shiny-apps/plant-selection/data/plants_prepared.rds...
+Error in gzfile(file, mode) : cannot open the connection
+In addition: Warning message:
+In gzfile(file, mode) :
+  cannot open compressed file 'data/plants_by_state/CT.rds', probable reason 'No such file or directory'
