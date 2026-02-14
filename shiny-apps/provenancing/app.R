@@ -19,6 +19,7 @@ library(leafpop)    # Leaflet popups
 library(arrow)      # Parquet file reading
 library(DBI)        # Database interface
 library(duckdb)     # In-memory analytical database
+library(readr)      # Fast CSV loading
 
 # Configuration Parameters ----------------------------------------------------
 CHUNK_SIZE_DEFAULT <- 5000        # Default chunk size for data streaming
@@ -30,7 +31,7 @@ FILTERED_PLOTS_LIMIT <- 10000000  # Maximum filtered plots to process for specie
 
 # Data Initialization ---------------------------------------------------------
 # Load climate data and interpolation function
-climate_lookup <- read.csv("data/climate_lookup_table.csv")
+climate_lookup <- read_csv("data/climate_lookup_table.csv", show_col_types = FALSE)
 interpolate_climate <- readRDS("data/interpolate_climate_function.rds")
 
 # Create DuckDB connection for efficient data querying
@@ -162,12 +163,14 @@ get_species_counts <- function(scenario, filter_type, climate_data, selected_hab
 #' @param bbox Optional bounding box list with west, east, south, north coordinates
 #' @return Data frame with species occurrence data
 get_species_occurrences_spatial <- function(species_name, bbox = NULL) {
-  base_query <- paste0("SELECT Plot, Long, Lat, AcceptedTaxonName, PctCov_100 FROM plant_data WHERE AcceptedTaxonName = '", species_name, "'")
+  # Escape single quotes to prevent SQL injection (e.g. species names with apostrophes like "O'Brien")
+  species_escaped <- gsub("'", "''", species_name)
+  base_query <- paste0("SELECT Plot, Long, Lat, AcceptedTaxonName, PctCov_100 FROM plant_data WHERE AcceptedTaxonName = '", species_escaped, "'")
   
-  # Add bounding box filter if provided
+  # Add bounding box filter if provided (bbox values are numeric from code, not user input)
   if (!is.null(bbox)) {
-    spatial_filter <- paste0(" AND Long >= ", bbox$west, " AND Long <= ", bbox$east, 
-                            " AND Lat >= ", bbox$south, " AND Lat <= ", bbox$north)
+    spatial_filter <- paste0(" AND Long >= ", bbox$west, " AND Long <= ", bbox$east,
+                             " AND Lat >= ", bbox$south, " AND Lat <= ", bbox$north)
     base_query <- paste0(base_query, spatial_filter)
   }
   
@@ -541,8 +544,8 @@ server <- function(input, output, session) {
       }
       
       total_loaded <- total_loaded + nrow(chunk_data)
-      gc() # Force garbage collection after each chunk
     }
+    if (stream_data$total_rows > 10000) gc()
     
     # Show performance notification for large datasets
     if (stream_data$total_rows > 50000) {
@@ -578,8 +581,8 @@ server <- function(input, output, session) {
         write.table(chunk_data, fname, sep = ",", append = TRUE, 
                    row.names = FALSE, col.names = FALSE)
         total_written <- total_written + nrow(chunk_data)
-        gc() # Force garbage collection
       }
+      if (stream_data$total_rows > 10000) gc()
     }
   )
   
@@ -650,7 +653,6 @@ server <- function(input, output, session) {
           
           filtered_plots <- c(filtered_plots, chunk_data$Plot)
           total_loaded <- total_loaded + nrow(chunk_data)
-          gc()  # Clean up after each chunk
         }
         
         climate_matched <- species_occurrences[species_occurrences$Plot %in% filtered_plots, ]
@@ -696,7 +698,6 @@ server <- function(input, output, session) {
           )
         
         total_loaded_species <- end_idx
-        gc() # Force garbage collection after each chunk
       }
       
       # Add climate-matched occurrences in chunks (purple markers)
@@ -722,17 +723,15 @@ server <- function(input, output, session) {
             )
           
           total_loaded_matched <- end_idx
-          gc() # Force garbage collection after each chunk
         }
       }
+      if (total_species_points > 10000 || nrow(climate_matched) > 10000) gc()
       
       # Show notification for large datasets
       if (total_species_points > 10000) {
         showNotification(paste("Loaded", min(total_species_points, SPECIES_DISPLAY_LIMIT), "species occurrences"), 
                          type = "message", duration = 3)
       }
-      
-      gc() # Final cleanup
     }
   })
   

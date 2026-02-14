@@ -2,166 +2,18 @@
    CLIMATE ADJUSTED PROVENANCING TOOL STYLES
    =========================================== */
 @import url('./shared-colors.css');
+@import url('./base-components.css');
 
 /* ===========================================
-   RESET & GLOBAL STYLES
+   PROVENANCING SPECIFIC
    =========================================== */
-* {
-  box-sizing: border-box;
-}
-
-body {
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: var(--bg-secondary);
-  color: var(--text-primary);
-  line-height: 1.6;
-  margin: 0;
-  padding: 0;
-}
-
-/* ===========================================
-   LAYOUT CONTAINERS
-   =========================================== */
-.header-container,
-.main-container,
-.footer-container {
-  max-width: 1450px;
-  margin: 0 auto;
-  padding: 0 1rem;
-}
-
 .main-layout {
-  display: grid;
   grid-template-columns: 320px 1fr;
-  gap: 2rem;
-  align-items: start;
-}
-
-.main-panel {
-  min-width: 0;
-}
-
-/* ===========================================
-   HEADER STYLES
-   =========================================== */
-.app-header {
-  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-light));
-  color: var(--text-white);
-  padding: 1.5rem 0;
-  box-shadow: 0 2px 10px var(--shadow-medium);
-  margin-bottom: 2rem;
-}
-
-.header-container {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-}
-
-.app-header h1 {
-  font-size: 2.2rem;
-  font-weight: 600;
-  margin: 0;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-.home-btn {
-  background: rgba(255, 255, 255, 0.15);
-  color: var(--text-white);
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  text-decoration: none;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
-}
-
-.home-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-  color: var(--text-white);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-}
-
-.home-btn i {
-  margin-right: 0.5rem;
-}
-
-/* ===========================================
-   CARD COMPONENTS
-   =========================================== */
-.info-card {
-  background: linear-gradient(135deg, var(--viz-green-1), var(--viz-green-2));
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 2px 10px var(--shadow-light);
-}
-
-.info-card h5 {
-  color: var(--primary-green);
-  font-weight: 600;
-  margin-bottom: 1rem;
-  font-size: 1.5rem;
-}
-
-.info-card h5 i {
-  margin-right: 0.5rem;
-  color: var(--success-green);
-}
-
-.info-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.7;
 }
 
 .filter-card,
 .results-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px var(--shadow-light);
-  overflow: hidden;
   margin-bottom: 1.5rem;
-}
-
-.filter-header,
-.results-header {
-  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-light));
-  color: var(--text-white);
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.filter-header h5,
-.results-header h5 {
-  margin: 0;
-  font-weight: 600;
-  font-size: 1.5rem;
-}
-
-.filter-header i,
-.results-header i {
-  margin-right: 0.5rem;
-  color: var(--text-white);
-  opacity: 0.9;
-}
-
-.filter-body {
-  padding: 1.5rem;
-}
-
-/* ===========================================
-   SIDEBAR & FILTERING
-   =========================================== */
-.sidebar {
-  position: sticky;
-  top: 2rem;
 }
 
 /* Step Sections */
@@ -538,23 +390,6 @@ body {
 
 .shiny-notification-close:hover {
   opacity: 1;
-}
-
-/* ===========================================
-   FOOTER
-   =========================================== */
-.app-footer {
-  background: var(--primary-green-dark);
-  color: var(--text-white);
-  text-align: center;
-  padding: 2rem 0;
-  margin-top: 3rem;
-}
-
-.app-footer p {
-  margin: 0;
-  font-size: 1.1rem;
-  opacity: 0.9;
 }
 
 /* ===========================================

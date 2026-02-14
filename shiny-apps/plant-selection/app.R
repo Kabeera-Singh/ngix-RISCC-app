@@ -16,6 +16,7 @@ library(shinyWidgets)
 library(DT)
 library(shinyjs)
 library(data.table)
+library(readr)
 
 # Global Configuration ========================================================
 
@@ -62,7 +63,7 @@ AVAILABLE_STATES <- names(STATE_ABBREVIATIONS)
 load_application_data <- function() {
   tryCatch({
     list(
-      plants = read.csv("data/ClimateSmart_Data_Cleaned.csv")
+      plants = read_csv("data/ClimateSmart_Data_Cleaned.csv", show_col_types = FALSE)
     )
   }, error = function(e) stop(paste("Failed to load data files:", e$message)))
 }
@@ -204,6 +205,13 @@ get_display_name_for_column <- function(column_name) {
   )
   
   ifelse(column_name %in% names(display_mapping), display_mapping[column_name], column_name)
+}
+
+# Get tooltip for a column name
+get_column_tooltip <- function(column_name) {
+  tooltip <- COLUMN_TOOLTIPS[[column_name]]
+  if (is.null(tooltip)) return("")
+  tooltip
 }
 
 create_filter_options <- function(plant_data, filter_config) {
@@ -530,18 +538,7 @@ server <- function(input, output, session) {
     }, error = function(e) message("Error clearing filters: ", e$message))
   })
 
-  # Get tooltip for a column name
-# Returns the descriptive tooltip for a column
-# Parameters:
-#   column_name: Column name to get tooltip for
-# Returns: Tooltip string or empty string if not found
-get_column_tooltip <- function(column_name) {
-  tooltip <- COLUMN_TOOLTIPS[[column_name]]
-  if (is.null(tooltip)) return("")
-  tooltip
-}
-
-# Helper Functions for Data Processing ======================================
+  # Helper Functions for Data Processing ======================================
   
   # Helper function to expand bloom period ranges
   # Converts month ranges (e.g., "January, March") to full month lists
@@ -626,106 +623,41 @@ get_column_tooltip <- function(column_name) {
     NULL
   }
   
-  # Check if plants match category values
-  # Performs exact and substring matching for filter criteria
-  # For Bloom.Period, expands ranges to handle month ranges
-  # For Hardiness Zone, checks if selected zone falls within plant's zone range
-  # Parameters:
-  #   plant_data: Plant data frame
-  #   column_name: Column to check
-  #   target_values: Values to match against
-  # Returns: Logical vector indicating matches
-  check_category_matches <- function(plant_data, column_name, target_values) {
-    if (!column_name %in% names(plant_data)) return(rep(FALSE, nrow(plant_data)))
-    
-    all_matches <- rep(FALSE, nrow(plant_data))
-    
-    for (target_value in target_values) {
-      if (is.na(target_value) || target_value == "") next
-      
-      for (i in seq_len(nrow(plant_data))) {
-        plant_value <- as.character(plant_data[[column_name]][i])
-        if (is.na(plant_value) || plant_value == "") next
-        
-        if (column_name == "hardiness_zone_numeric") {
-          # For hardiness zone, check if selected zone is within plant's min/max range
-          target_zone <- as.numeric(target_value)
-          plant_min <- plant_data$min_hardiness_zone[i]
-          plant_max <- plant_data$max_hardiness_zone[i]
-          if (!is.na(target_zone) && !is.na(plant_min) && !is.na(plant_max)) {
-            if (target_zone >= plant_min && target_zone <= plant_max) {
-              all_matches[i] <- TRUE
-            }
-          }
-        } else if (column_name == "Bloom.Period") {
-          # For bloom period, expand ranges and check if target month is in the range
-          expanded_months <- expand_bloom_period(plant_value)
-          if (any(tolower(expanded_months) == tolower(target_value))) {
-            all_matches[i] <- TRUE
-          }
-        } else {
-          # For other columns, split by common delimiters and check each part
-          plant_values <- str_trim(strsplit(plant_value, "[,;/]")[[1]])
-          # Check for exact match (case-insensitive) with any of the split values
-          if (any(tolower(plant_values) == tolower(target_value))) {
-            all_matches[i] <- TRUE
-          }
-        }
+  # Internal: compute match counts per plant (shared logic for check and count)
+  compute_category_match_counts <- function(plant_data, column_name, target_values) {
+    if (!column_name %in% names(plant_data)) return(rep(0L, nrow(plant_data)))
+    target_values <- target_values[!is.na(target_values) & target_values != ""]
+    if (length(target_values) == 0) return(rep(0L, nrow(plant_data)))
+    n <- nrow(plant_data)
+    if (column_name == "hardiness_zone_numeric") {
+      target_zones <- as.numeric(target_values)
+      target_zones <- target_zones[!is.na(target_zones)]
+      if (length(target_zones) == 0) return(rep(0L, n))
+      plant_min <- plant_data$min_hardiness_zone
+      plant_max <- plant_data$max_hardiness_zone
+      counts <- rep(0L, n)
+      for (tz in target_zones) {
+        counts <- counts + as.integer(tz >= plant_min & tz <= plant_max & !is.na(plant_min) & !is.na(plant_max))
       }
+      return(counts)
     }
-    
-    all_matches
+    if (column_name == "Bloom.Period") {
+      plant_values_list <- lapply(seq_len(n), function(i) expand_bloom_period(plant_data[[column_name]][i]))
+      target_lower <- tolower(target_values)
+      return(vapply(plant_values_list, function(pv) sum(tolower(pv) %in% target_lower), integer(1)))
+    }
+    plant_values_list <- strsplit(as.character(plant_data[[column_name]]), "[,;/]")
+    plant_values_list <- lapply(plant_values_list, function(x) tolower(str_trim(x)))
+    target_lower <- tolower(target_values)
+    return(vapply(plant_values_list, function(pv) sum(pv %in% target_lower), integer(1)))
   }
   
-  # Count matches for sorting score calculation
-  # Similar to check_category_matches but returns count instead of boolean
-  # For Bloom.Period, expands ranges to handle month ranges
-  # For Hardiness Zone, checks if selected zone falls within plant's zone range
-  # Parameters:
-  #   plant_data: Plant data frame
-  #   column_name: Column to check
-  #   target_values: Values to match against
-  # Returns: Numeric vector with match counts
+  check_category_matches <- function(plant_data, column_name, target_values) {
+    compute_category_match_counts(plant_data, column_name, target_values) > 0
+  }
+  
   count_category_matches <- function(plant_data, column_name, target_values) {
-    if (!column_name %in% names(plant_data)) return(rep(0, nrow(plant_data)))
-    
-    match_counts <- rep(0, nrow(plant_data))
-    
-    for (target_value in target_values) {
-      if (is.na(target_value) || target_value == "") next
-      
-      for (i in seq_len(nrow(plant_data))) {
-        plant_value <- as.character(plant_data[[column_name]][i])
-        if (is.na(plant_value) || plant_value == "") next
-        
-        if (column_name == "hardiness_zone_numeric") {
-          # For hardiness zone, check if selected zone is within plant's min/max range
-          target_zone <- as.numeric(target_value)
-          plant_min <- plant_data$min_hardiness_zone[i]
-          plant_max <- plant_data$max_hardiness_zone[i]
-          if (!is.na(target_zone) && !is.na(plant_min) && !is.na(plant_max)) {
-            if (target_zone >= plant_min && target_zone <= plant_max) {
-              match_counts[i] <- match_counts[i] + 1
-            }
-          }
-        } else if (column_name == "Bloom.Period") {
-          # For bloom period, expand ranges and check if target month is in the range
-          expanded_months <- expand_bloom_period(plant_value)
-          if (any(tolower(expanded_months) == tolower(target_value))) {
-            match_counts[i] <- match_counts[i] + 1
-          }
-        } else {
-          # For other columns, split by common delimiters and check each part
-          plant_values <- str_trim(strsplit(plant_value, "[,;/]")[[1]])
-          # Check for exact match (case-insensitive) with any of the split values
-          if (any(tolower(plant_values) == tolower(target_value))) {
-            match_counts[i] <- match_counts[i] + 1
-          }
-        }
-      }
-    }
-    
-    match_counts
+    compute_category_match_counts(plant_data, column_name, target_values)
   }
   
   # Filter plants by category values
@@ -739,13 +671,7 @@ get_column_tooltip <- function(column_name) {
     if (length(target_values) == 0 || !column_name %in% names(plant_data)) {
       return(plant_data)
     }
-    
-    category_matches <- rep(FALSE, nrow(plant_data))
-    for (target_value in target_values) {
-      matches <- check_category_matches(plant_data, column_name, target_value)
-      category_matches <- category_matches | matches
-    }
-    
+    category_matches <- check_category_matches(plant_data, column_name, target_values)
     plant_data[category_matches, ]
   }
   
@@ -756,10 +682,8 @@ get_column_tooltip <- function(column_name) {
       # Get state abbreviation
       state_abbreviation <- STATE_ABBREVIATIONS[input$selected_state]
       
-      # Filter by state
-      state_plants <- cleaned_plant_data[
-        cleaned_plant_data$state == state_abbreviation, 
-      ]
+      # Filter by state (data.table for faster subsetting)
+      state_plants <- as.data.frame(as.data.table(cleaned_plant_data)[state == state_abbreviation])
       
       if (nrow(state_plants) == 0) return(data.frame())
       
