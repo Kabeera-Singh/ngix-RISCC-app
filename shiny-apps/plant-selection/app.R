@@ -60,7 +60,6 @@ AVAILABLE_STATES <- names(STATE_ABBREVIATIONS)
 
 # Data Loading and Preprocessing ==============================================
 load_application_data <- function() {
-  cat("Loading application data...\n")
   tryCatch({
     list(
       plants = read.csv("data/ClimateSmart_Data_Cleaned.csv")
@@ -88,8 +87,6 @@ create_filter_configuration <- function() {
 #   filter_config: Filter configuration data frame
 # Returns: Cleaned data frame with standardized column names
 clean_plant_database <- function(raw_plant_data, filter_config) {
-  cat("Cleaning plant database...\n")
-  
   raw_plant_data %>%
     select(State, Scientific.Name, Common.Name, Hardiness.Zone.Low, Hardiness.Zone.High,
            all_of(intersect(filter_config$column_name, names(.))), Propagation.Methods, 
@@ -210,8 +207,6 @@ get_display_name_for_column <- function(column_name) {
 }
 
 create_filter_options <- function(plant_data, filter_config) {
-  cat("Creating filter options...\n")
-  
   filter_options <- data.frame(
     column_name = character(0),
     display_name = character(0),
@@ -273,8 +268,6 @@ create_filter_options <- function(plant_data, filter_config) {
 #   filter_options: Filter options data frame
 # Returns: List representing tree structure
 create_filter_tree <- function(filter_options) {
-  cat("Creating filter tree structure...\n")
-  
   tree_structure <- list()
   node_id_counter <- 1
   
@@ -310,8 +303,6 @@ create_filter_tree <- function(filter_options) {
 #   filter_options: Filter options data frame
 # Returns: List representing tree structure
 create_sorting_tree <- function(filter_options) {
-  cat("Creating sorting tree structure...\n")
-  
   tree_structure <- list()
   node_id_counter <- 1000  # Start with higher numbers to avoid conflicts
   
@@ -407,8 +398,6 @@ filter_tree_structure <- create_filter_tree(complete_filter_options)
 sorting_tree_structure <- create_sorting_tree(complete_filter_options)
 tree_node_mapping <- create_tree_mapping(filter_tree_structure, sorting_tree_structure, complete_filter_options)
 
-cat("Application initialization completed successfully!\n")
-
 # User Interface Definition ===================================================
 ui <- fluidPage(
   # Include CSS and JavaScript dependencies
@@ -416,9 +405,9 @@ ui <- fluidPage(
     tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
     tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
     tags$link(
-      href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css", 
+      href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
       rel = "stylesheet"
-    ),
+    )
   ),
   
   # Enable shinyjs for dynamic UI interactions
@@ -531,34 +520,14 @@ server <- function(input, output, session) {
   
   observeEvent(input$clear_all_filters, {
     tryCatch({
-      updateTreeInput(session = session, inputId = "filter_tree", 
+      updateTreeInput(session = session, inputId = "filter_tree",
                      selected = character(0))
-      updateTreeInput(session = session, inputId = "sorting_tree", 
+      updateTreeInput(session = session, inputId = "sorting_tree",
                      selected = character(0))
-    }, error = function(e) cat(sprintf("Error clearing filters: %s\n", e$message)))
+    }, error = function(e) message("Error clearing filters: ", e$message))
   })
-  
-  # Get display name for a column name
-# Maps internal column names to user-friendly display names
-# Parameters:
-#   column_name: Internal column name
-# Returns: Display name string
-get_display_name_for_column <- function(column_name) {
-  display_mapping <- c(
-    "Growth.Habit" = "Growth Habit", "Sun.Level" = "Sun Level",
-    "Moisture.Level" = "Moisture Level", "Soil.Type" = "Soil Type",
-    "Bloom.Period" = "Bloom Period", "max_height" = "Max Height", "Color" = "Color",
-    "Interesting.Foliage" = "Interesting Foliage", "Showy" = "Showy",
-    "Garden.Aggressive" = "Garden Aggressive", "Wildlife.Services" = "Wildlife Services",
-    "Pollinators" = "Pollinators", "Climate.Status" = "Climate Status",
-    "propagation_keywords" = "Propagation Keywords",
-    "propagation_methods" = "Propagation Methods"
-  )
-  
-  ifelse(column_name %in% names(display_mapping), display_mapping[column_name], column_name)
-}
 
-# Get tooltip for a column name
+  # Get tooltip for a column name
 # Returns the descriptive tooltip for a column
 # Parameters:
 #   column_name: Column name to get tooltip for
@@ -889,7 +858,7 @@ get_column_tooltip <- function(column_name) {
       sorted_results
       
     }, error = function(e) {
-      cat(sprintf("Error in filtered_plant_list: %s\n", e$message))
+      message("Error in filtered_plant_list: ", e$message)
       data.frame()
     })
   })

@@ -7,9 +7,7 @@
 # ============================================================================
 
 # Environment Setup -----------------------------------------------------------
-rm(list = ls())
 options(stringsAsFactors = FALSE)
-options(mc.cores = parallel::detectCores())
 
 # Load Required Libraries -----------------------------------------------------
 library(sf)         # Spatial data handling
@@ -185,48 +183,7 @@ ui <- fluidPage(
     tags$link(
       href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
       rel = "stylesheet"
-    ),
-    # Custom CSS for improved UI components
-    tags$style(HTML("
-      .habits-container {
-        max-height: none !important;
-        overflow-y: visible !important;
-      }
-      .habits-container .shiny-input-checkboxgroup {
-        max-height: none !important;
-      }
-      .habits-container .shiny-input-checkboxgroup .shiny-options-group {
-        max-height: none !important;
-        overflow-y: visible !important;
-        column-count: 2;
-        column-gap: 15px;
-      }
-      .habits-container .shiny-input-checkboxgroup .shiny-options-group .checkbox {
-        margin-bottom: 3px !important;
-        margin-top: 3px !important;
-        break-inside: avoid;
-        display: inline-block;
-        width: 100%;
-      }
-      .clear-all-btn {
-        margin-bottom: 10px;
-        font-size: 11px;
-        padding: 2px 8px;
-        width: auto;
-        float: right;
-        border: 1px solid #6c757d;
-        background-color: transparent;
-        color: #6c757d;
-      }
-      .clear-all-btn:hover {
-        background-color: #6c757d;
-        color: white;
-      }
-      .habits-controls {
-        overflow: hidden;
-        margin-bottom: 5px;
-      }
-    "))
+    )
   ),
   
   # Application Header
@@ -300,10 +257,10 @@ div(class = "info-card",
                 selected = "temperature", width = "100%")
             ),
             
-            # Step 5: Growth Habits Selection
+            # Step 3: Growth Habits Selection
             div(class = "form-group step-section",
               div(class = "step-header",
-                tags$span(class = "step-number", "5"),
+                tags$span(class = "step-number", "3"),
                 tags$label(tags$i(class = "fas fa-seedling"), " Select plant growth habits of interest")
               ),
               div(class = "habits-container",
@@ -335,11 +292,11 @@ div(class = "info-card",
       
       # Main Panel: Results and Visualizations
       div(class = "main-panel",
-        # Step 3: Interactive Map
+        # Step 4: Interactive Map
         div(class = "results-card map-card",
           div(class = "results-header",
             div(class = "step-header-main",
-              tags$span(class = "step-number-main", "3"),
+              tags$span(class = "step-number-main", "4"),
               h5(tags$i(class = "fas fa-globe-americas"), " Climate-Adjusted Provenancing Localities")
             )
           ),
@@ -350,11 +307,11 @@ div(class = "info-card",
           )
         ),
         
-        # Step 4: Species Analysis Chart
+        # Step 5: Species Analysis Chart
         div(class = "results-card species-card",
           div(class = "results-header",
             div(class = "step-header-main",
-              tags$span(class = "step-number-main", "4"),
+              tags$span(class = "step-number-main", "5"),
               h5(tags$i(class = "fas fa-chart-bar"), " Most Common Species in Climate Range")
             )
           ),
@@ -363,7 +320,7 @@ div(class = "info-card",
           )
         ),
         
-        # Step 6: Species Selection
+        # Step 6: Species Selection and Occurrence Map
         div(class = "results-card species-selection-card",
           div(class = "results-header",
             div(class = "step-header-main",
