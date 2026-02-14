@@ -242,17 +242,16 @@ ui <- fluidPage(
   # Main Application Content
   div(class = "main-container",
     # Information Section
-    div(class = "info-card",
-      h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
-      p(paste(
-        "Welcome to the Climate Adjusted Provenancing Tool. You can use this tool to identify",
-        "vegetation assemblages that correspond to current and future climate conditions at your",
-        "location of interest and identify taxa that are widely distributed under these climate conditions.",
-        "The data underlying this product come from Petri et al. 2022, and can be accessed in full at",
-        "https://esajournals.onlinelibrary.wiley.com/doi/full/10.1002/ecy.3947.",
-        "Follow the numeric guides below to explore the data. Metadata and additional information about this tool can be found here."
-      ))
-    ),
+div(class = "info-card",
+  h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
+  p(
+    "Welcome to the Climate Adjusted Provenancing Tool. Use this tool to (1) map sites where vegetation composition has been measured and that correspond to the current and/or future climate conditions of your location and (2) identify species by growth form within the mapped sites. This tool can be used to inform native seed collected for restoration using a climate-adjusted provenancing approach (",
+    tags$a(href = "https://www.risccnetwork.org/research-summaries/prober2016", target = "_blank", "learn more"),
+    "). The data underlying this product come from ",
+    tags$a(href = "https://doi.org/10.1002/ecy.3947", target = "_blank", "Petri et al. 2022"),
+    "."
+  )
+),
     
     # Main Layout: Sidebar and Content
     div(class = "main-layout",
@@ -267,7 +266,11 @@ ui <- fluidPage(
             div(class = "form-group step-section",
               div(class = "step-header",
                 tags$span(class = "step-number", "1"),
-                tags$label(tags$i(class = "fas fa-map-marker-alt"), " Input coordinates of your focal site")
+                  tags$label(
+                    tags$i(class = "fas fa-map-marker-alt"), 
+                    " Input your site coordinates (e.g., Amherst, MA: -72.5, 42.4). ",
+                    tags$a(href = "https://www.latlong.net/", target = "_blank", "Look up coordinates here.")
+                  )
               ),
               div(class = "coordinate-inputs",
                 div(class = "coord-input-group",
@@ -470,7 +473,9 @@ server <- function(input, output, session) {
   
   # Initialize primary map
   output$mymap <- renderLeaflet({
-    leaflet() %>%
+    leaflet(
+            options = leafletOptions(minZoom = 3, maxZoom = 18)
+    ) %>%
       addTiles() %>%
       addScaleBar(position = "bottomright") %>%
       setView(lng = -79, lat = 40, zoom = 4)
