@@ -4,19 +4,19 @@
 
 # Load Required Libraries =====================================================
 # These libraries are essential for the application's functionality:
-# - tidyverse: Data manipulation and visualization
+# - dplyr, stringr: Data manipulation (lighter than full tidyverse)
 # - shiny: Web application framework
 # - shinyWidgets: Enhanced UI widgets (e.g., treeInput, noUiSliderInput)
 # - DT: Interactive data tables
 # - shinyjs: JavaScript operations in Shiny
 # - data.table: Efficient data handling
-library(tidyverse)
+library(dplyr)
+library(stringr)
 library(shiny)
 library(shinyWidgets)
 library(DT)
 library(shinyjs)
 library(data.table)
-library(readr)
 
 # Global Configuration ========================================================
 
@@ -45,7 +45,8 @@ COLUMN_TOOLTIPS <- list(
   "Garden Aggressive" = "Indicates if the plant tends to self-seed or spread aggressively in gardens.",
   "Wildlife Services" = "Types of wildlife that benefit from this plant (e.g., birds, pollinators, mammals).",
   "Pollinators" = "Types of pollinators attracted to this plant (e.g., bees, butterflies, hummingbirds).",
-  "Propagation Methods" = "Ways to reproduce the plant: from seed, cuttings, division, or other methods."
+  "Propagation Methods" = "Ways to reproduce the plant: from seed, cuttings, division, or other methods.",
+  "Propagation Description" = "Ways to reproduce the plant: from seed, cuttings, division, or other methods."
 )
 
 # State abbreviations mapping for data filtering
@@ -60,11 +61,28 @@ STATE_ABBREVIATIONS <- c(
 AVAILABLE_STATES <- names(STATE_ABBREVIATIONS)
 
 # Data Loading and Preprocessing ==============================================
+# Map CSV column names (spaces) to internal names (dots) for filter_config compatibility
+CSV_TO_INTERNAL_NAMES <- c(
+  "Scientific Name" = "Scientific.Name", "Common Name" = "Common.Name",
+  "Growth Habit" = "Growth.Habit", "Hardiness Zone Low" = "Hardiness.Zone.Low",
+  "Hardiness Zone High" = "Hardiness.Zone.High", "Climate Status" = "Climate.Status",
+  "Sun Level" = "Sun.Level", "Moisture Level" = "Moisture.Level",
+  "Soil Type" = "Soil.Type", "Bloom Period" = "Bloom.Period",
+  "Interesting Foliage" = "Interesting.Foliage", "Garden Aggressive" = "Garden.Aggressive",
+  "Wildlife Services" = "Wildlife.Services", "Propagation Methods" = "Propagation.Methods",
+  "Propagation Keywords" = "Propagation.Keywords"
+)
+
 load_application_data <- function() {
   tryCatch({
-    list(
-      plants = read_csv("data/ClimateSmart_Data_Cleaned.csv", show_col_types = FALSE)
-    )
+    plants <- data.table::fread("data/ClimateSmart_Data_Cleaned.csv")
+    # Normalize column names for compatibility with filter_config
+    for (old_name in names(CSV_TO_INTERNAL_NAMES)) {
+      if (old_name %in% names(plants)) {
+        data.table::setnames(plants, old_name, CSV_TO_INTERNAL_NAMES[old_name])
+      }
+    }
+    list(plants = plants)
   }, error = function(e) stop(paste("Failed to load data files:", e$message)))
 }
 
@@ -213,6 +231,13 @@ get_column_tooltip <- function(column_name) {
   if (is.null(tooltip)) return("")
   tooltip
 }
+
+# Pre-compute tooltip JS map at startup (avoids rebuilding on every table render)
+COLUMN_TOOLTIPS_JS <- paste(
+  sprintf('"%s": "%s"', names(COLUMN_TOOLTIPS),
+    vapply(COLUMN_TOOLTIPS, function(t) gsub('"', '\\\\"', gsub('\n', ' ', t)), character(1))),
+  collapse = ", "
+)
 
 create_filter_options <- function(plant_data, filter_config) {
   filter_options <- data.frame(
@@ -396,15 +421,29 @@ create_tree_mapping <- function(filter_tree, sorting_tree, filter_options) {
 }
 
 # Initialize Application Data =================================================
-app_data <- load_application_data()
-plant_data_raw <- app_data$plants
+# Use pre-computed RDS if available (run scripts/prepare_plant_data.R to generate)
+FILTER_OPTIONS_PATH <- "data/filter_options.rds"
+PLANTS_BY_STATE_DIR <- "data/plants_by_state"
+USE_PRECOMPUTED <- file.exists(FILTER_OPTIONS_PATH) && dir.exists(PLANTS_BY_STATE_DIR)
 
-filter_configuration <- create_filter_configuration()
-cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
-complete_filter_options <- create_filter_options(cleaned_plant_data, filter_configuration)
-filter_tree_structure <- create_filter_tree(complete_filter_options)
-sorting_tree_structure <- create_sorting_tree(complete_filter_options)
-tree_node_mapping <- create_tree_mapping(filter_tree_structure, sorting_tree_structure, complete_filter_options)
+if (USE_PRECOMPUTED) {
+  filter_options_bundle <- readRDS(FILTER_OPTIONS_PATH)
+  complete_filter_options <- filter_options_bundle$complete_filter_options
+  filter_tree_structure <- filter_options_bundle$filter_tree_structure
+  sorting_tree_structure <- filter_options_bundle$sorting_tree_structure
+  tree_node_mapping <- filter_options_bundle$tree_node_mapping
+  cleaned_plant_data <- NULL  # Not needed; we load by state
+  filter_configuration <- create_filter_configuration()
+} else {
+  app_data <- load_application_data()
+  plant_data_raw <- app_data$plants
+  filter_configuration <- create_filter_configuration()
+  cleaned_plant_data <- clean_plant_database(plant_data_raw, filter_configuration)
+  complete_filter_options <- create_filter_options(cleaned_plant_data, filter_configuration)
+  filter_tree_structure <- create_filter_tree(complete_filter_options)
+  sorting_tree_structure <- create_sorting_tree(complete_filter_options)
+  tree_node_mapping <- create_tree_mapping(filter_tree_structure, sorting_tree_structure, complete_filter_options)
+}
 
 # User Interface Definition ===================================================
 ui <- fluidPage(
@@ -642,7 +681,12 @@ server <- function(input, output, session) {
       return(counts)
     }
     if (column_name == "Bloom.Period") {
-      plant_values_list <- lapply(seq_len(n), function(i) expand_bloom_period(plant_data[[column_name]][i]))
+      # Use pre-expanded bloom months if available (from prepare_plant_data.R)
+      if ("bloom_months_expanded" %in% names(plant_data)) {
+        plant_values_list <- plant_data$bloom_months_expanded
+      } else {
+        plant_values_list <- lapply(seq_len(n), function(i) expand_bloom_period(plant_data[[column_name]][i]))
+      }
       target_lower <- tolower(target_values)
       return(vapply(plant_values_list, function(pv) sum(tolower(pv) %in% target_lower), integer(1)))
     }
@@ -679,11 +723,19 @@ server <- function(input, output, session) {
     req(input$selected_state)
     
     tryCatch({
-      # Get state abbreviation
       state_abbreviation <- STATE_ABBREVIATIONS[input$selected_state]
       
-      # Filter by state (data.table for faster subsetting)
-      state_plants <- as.data.frame(as.data.table(cleaned_plant_data)[state == state_abbreviation])
+      # Load state-specific data (pre-computed RDS or filter full dataset)
+      if (USE_PRECOMPUTED) {
+        state_file <- file.path(PLANTS_BY_STATE_DIR, paste0(state_abbreviation, ".rds"))
+        if (file.exists(state_file)) {
+          state_plants <- as.data.frame(readRDS(state_file))
+        } else {
+          state_plants <- data.frame()
+        }
+      } else {
+        state_plants <- as.data.frame(as.data.table(cleaned_plant_data)[state == state_abbreviation])
+      }
       
       if (nrow(state_plants) == 0) return(data.frame())
       
@@ -788,7 +840,7 @@ server <- function(input, output, session) {
       message("Error in filtered_plant_list: ", e$message)
       data.frame()
     })
-  })
+  }) %>% debounce(300)
   
   output$plant_results_count <- renderText({
     results <- filtered_plant_list()
@@ -828,18 +880,6 @@ server <- function(input, output, session) {
         list(targets = "_all", width = "140px")
       )
       
-      # Generate tooltip data structure
-      col_tooltips_js <- paste(
-        sprintf('"%s": "%s"', 
-               colnames(results),
-               sapply(colnames(results), function(col) {
-                 tooltip <- get_column_tooltip(col)
-                 # Escape special characters for JavaScript
-                 gsub('"', '\\"', gsub('\n', ' ', tooltip))
-               })),
-        collapse = ", "
-      )
-      
       dt_table <- datatable(
         results,
         extensions = 'Buttons',
@@ -869,7 +909,7 @@ server <- function(input, output, session) {
             "function(settings, json) {",
             "  var api = this.api();",
             "  var headers = api.columns().header();",
-            "  var tooltips = {", col_tooltips_js, "};",
+            "  var tooltips = {", COLUMN_TOOLTIPS_JS, "};",
             "  $(headers).each(function(i) {",
             "    var headerText = $(this).text().trim();",
             "    var tooltip = tooltips[headerText];",

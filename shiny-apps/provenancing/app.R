@@ -19,7 +19,7 @@ library(leafpop)    # Leaflet popups
 library(arrow)      # Parquet file reading
 library(DBI)        # Database interface
 library(duckdb)     # In-memory analytical database
-library(readr)      # Fast CSV loading
+library(data.table) # Fast CSV loading
 
 # Configuration Parameters ----------------------------------------------------
 CHUNK_SIZE_DEFAULT <- 5000        # Default chunk size for data streaming
@@ -30,8 +30,8 @@ SPECIES_DISPLAY_LIMIT <- 2000000  # Maximum species occurrences to display on ma
 FILTERED_PLOTS_LIMIT <- 10000000  # Maximum filtered plots to process for species comparison
 
 # Data Initialization ---------------------------------------------------------
-# Load climate data and interpolation function
-climate_lookup <- read_csv("data/climate_lookup_table.csv", show_col_types = FALSE)
+# Load climate data and interpolation function (fread is faster than read_csv)
+climate_lookup <- as.data.frame(data.table::fread("data/climate_lookup_table.csv"))
 interpolate_climate <- readRDS("data/interpolate_climate_function.rds")
 
 # Create DuckDB connection for efficient data querying

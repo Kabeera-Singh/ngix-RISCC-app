@@ -34,6 +34,16 @@ cd ngix-RISCC-app
 ### 2. Install Data Files
 **TODO**: Add instructions for installing data files from Google Drive folder
 
+### 3. Prepare Plant Selection Data (Optional - for faster startup)
+After updating `ClimateSmart_Data_Cleaned.csv`, run the prepare script to generate pre-computed RDS files for faster loading and lower RAM usage:
+
+```bash
+cd shiny-apps/plant-selection
+Rscript scripts/prepare_plant_data.R
+```
+
+This creates `data/plants_prepared.rds`, `data/plants_by_state/*.rds`, and `data/filter_options.rds`. The app will use these when present; otherwise it falls back to loading and processing the CSV at startup.
+
 ## Adding New Apps
 
 ### 1. Create App Directory
