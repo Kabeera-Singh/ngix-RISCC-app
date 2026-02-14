@@ -26,7 +26,7 @@ DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
 
 # Column Tooltips and Descriptions
 COLUMN_TOOLTIPS <- list(
-  "Match Score" = "Percentage of selected sorting criteria matched by this plant. Higher scores indicate better matches to your preferences.",
+  "Match Score" = "The match score represents how many of your sorting criteria a given species meets. A higher match score is a better match to your preferences.",
   "Scientific Name" = "The official binomial nomenclature (genus and species) of the plant.",
   "Common Name" = "The widely recognized common or vernacular name of the plant species.",
   "Min Zone" = "The lowest USDA hardiness zone where this plant can survive winter.",
@@ -436,12 +436,17 @@ ui <- fluidPage(
   div(class = "main-container",
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
-      p(paste(
-        "Select your state and desired plant characteristics.",
-        "Filter columns must match for plants to appear in results.",
-        "Sorting columns help rank plants by how well they match your preferences.",
-        "Match score indicates the percentage of selected criteria each plant matches."
-      )),
+      p("Select your state and desired site and plant characteristics below. Filter columns must match for plants to appear in results. Sorting columns add to the match score to help rank plants by preference. This tool is still under construction. Resulting lists may not be fully correct."),
+      p(tags$strong("Match score:"), " Each plant earns +1 point for matching a sorting preference. The score helps rank plants by how well they fit your desired characteristics."),
+      p("Looking for sources of native plants? Try searching for vendors through directories ",
+        tags$a(href = "https://nativegardendesigns.wildones.org/nursery-list/", "here"), ", ",
+        tags$a(href = "https://www.audubon.org/native-plants", "here"), ", ",
+        tags$a(href = "https://homegrownnationalpark.org/directory/", "here"), ", or ",
+        tags$a(href = "https://xerces.org/pollinator-conservation/native-plant-nursery-and-seed-directory", "here"), ". ",
+        "Or if you're looking specifically for nurseries that sell ", tags$em("only"),
+        " native plants sourced from local/regional genotypes, find those ",
+        tags$a(href = "https://beechhollowfarms.com/native-plant-nurseries/", "here"), "."
+      ),
       p(class = "funding-acknowledgement",
         tags$strong("Funding Acknowledgement:"),
         " This tool was partially supported by the U.S. Geological Survey's Northeast Climate Adaptation Science Center through grants G23AC00614-00, G22AC00084-02, and G19AC00091 and NSF GRFP No. 1938059."
@@ -481,7 +486,7 @@ ui <- fluidPage(
               ),
               
               div(class = "sorting-subsection",
-                div(class = "subsection-title", "Sorting Preferences (sorts by match score)"),
+                div(class = "subsection-title", "Sorting Preferences (sorts by best match)"),
                 treeInput("sorting_tree", label = NULL,
                   choices = sorting_tree_structure, returnValue = "id", closeDepth = 0)
               )
@@ -509,7 +514,14 @@ ui <- fluidPage(
   
   tags$footer(class = "app-footer",
     div(class = "footer-container",
-      p("Climate Resilient Plants Database")
+      p(
+        tags$strong("Recommended Citation:"),
+        " Singh, K., M.E. Fertakos, T.W.M. Nuhfer, J.M. Allen, E.M. Beaury, B.A. Bradley. C-SNaP Tools: Climate-smart native plant selection. URL: https://www.climatesmartnativeplants.org/plant-selection/, access date."
+      ),
+      p(
+        tags$strong("Publication:"),
+        " This tool is based on: Fertakos, M.E., T.W.M. Nuhfer, E.M. Beaury, S. Birch, K. Singh, B.A. Bradley, C. Marshner, and J.M. Allen. 2026. The climate smart gardening database: Native and near-native garden plants for the northeastern United States. Ecology."
+      )
     )
   )
 )
@@ -946,7 +958,7 @@ get_column_tooltip <- function(column_name) {
             list(extend = 'excel', text = '<i class="fas fa-download"></i> Excel', 
                  filename = filename_base, className = 'btn-excel'),
             list(extend = 'pdf', text = '<i class="fas fa-download"></i> PDF', 
-                 filename = filename_base, className = 'btn-pdf')
+                 filename = filename_base, className = 'btn-pdf', orientation = 'landscape')
           ),
           responsive = FALSE,
           autoWidth = FALSE,
@@ -999,6 +1011,7 @@ get_column_tooltip <- function(column_name) {
             "      });",
             "    }",
             "  });",
+            "  $('.dataTables_filter input').attr('title', 'Searches only within the currently filtered results and visible columns.');",
             "}"
           )
         ),
