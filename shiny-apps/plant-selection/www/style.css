@@ -829,6 +829,35 @@ body {
 /* ===========================================
    PRINT STYLES
    =========================================== */
+.match-score-explanation {
+  background: linear-gradient(135deg, rgba(76, 175, 80, 0.06), rgba(76, 175, 80, 0.02));
+  border-left: 4px solid var(--primary-green);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.match-score-explanation p {
+  margin: 0 0 0.5rem 0;
+}
+
+.match-score-explanation p:last-child {
+  margin-bottom: 0;
+}
+
+.match-score-explanation strong {
+  color: var(--primary-green);
+  font-weight: 600;
+}
+
+.match-score-explanation em {
+  font-style: italic;
+  color: var(--text-primary);
+}
+
 .funding-acknowledgement {
   background: linear-gradient(135deg, rgba(76, 175, 80, 0.08), rgba(76, 175, 80, 0.04));
   border: 1px solid var(--primary-green-light);
