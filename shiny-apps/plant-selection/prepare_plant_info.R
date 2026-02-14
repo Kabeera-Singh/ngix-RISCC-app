@@ -305,7 +305,7 @@ states <- unique(cleaned_dt$state)
 for (st in states) {
   if (!is.na(st) && nchar(st) > 0) {
     state_subset <- cleaned_dt[state == st]
-    saveRDS(state_subset, file.path("data", "plants_by_state", paste0(st, ".rds")))
+    saveRDS(state_subset, file.path("shiny-apps/plant-selection/data/plants_by_state", paste0(st, ".rds")))
   }
 }
 message("Saved ", length(states), " state files to shiny-apps/plant-selection/data/plants_by_state/")
@@ -327,12 +327,3 @@ message("Saving shiny-apps/plant-selection/data/filter_options.rds...")
 saveRDS(filter_options_bundle, "shiny-apps/plant-selection/data/filter_options.rds")
 
 message("Done. Run the plant-selection app to use pre-computed data.")
-
-
-Loading ClimateSmart_Data_Cleaned.csv...
-Pre-expanding bloom periods...
-Saving shiny-apps/plant-selection/data/plants_prepared.rds...
-Error in gzfile(file, mode) : cannot open the connection
-In addition: Warning message:
-In gzfile(file, mode) :
-  cannot open compressed file 'data/plants_by_state/CT.rds', probable reason 'No such file or directory'
