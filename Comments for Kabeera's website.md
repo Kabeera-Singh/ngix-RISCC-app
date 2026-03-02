@@ -76,3 +76,11 @@ Plant Selection [https://www.climatesmartnativeplants.org/plant-selection/](http
 - Choose a species should ideally be alphabetical 	
 
 # **Text for top**: This tool visualizes introduced plant occurrence and abundance (source Bradley et al. 2025 in Scholarworks) across the continental U.S.  Occurrence data are sourced from EDDMapS (link), iMap invasives (link), and twelve other state and regional databases. All data points include information about qualitative abundance (e.g., high), percent cover (from 0-100%), and cover class (the average of a range of percent cover e.g., 3 is the mean of 1-5%). NAs indicate no information about abundance (we only know that the species is present). ‘Species present’ indicates that the species has been reported as present at either unknown or low abundance. ‘Species abundant’ indicates that the species has been reported as present with a qualitative abundance value of X, a reported percent cover \>Y, or an average cover class \>Z.
+
+
+Funding sources moved to the bottom with the citations
+The match score being a percentage now means new language is needed to make it clear what it is doing in the description I think (can you verify Kabeera) it is stating what % of sorting preferences are present in the species?
+New text underlined: “Match Score: The match score represents the percentage of your sorting criteria a given species meets out of 100%”
+If you select too many sorting columns, the PDF is cut off. Either add a tooltip to the PDF button stating it can only support X columns, or change somehow.
+Seem to be having some server issues - maybe just me? Loading slow
+The hover over columns tooltip does not display where it should - it is often very below the column header and can be hard to find. Is there a way to make it appear directly under the column header?
