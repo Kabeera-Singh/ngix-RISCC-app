@@ -27,7 +27,7 @@ DEFAULT_COLUMNS <- c("Sun Level", "Moisture Level")
 
 # Column Tooltips and Descriptions
 COLUMN_TOOLTIPS <- list(
-  "Match Score" = "The match score represents how many of your sorting criteria a given species meets. A higher match score is a better match to your preferences.",
+  "Match Score" = "The match score represents the percentage of your sorting criteria a given species meets out of 100%. A higher match score is a better match to your preferences.",
   "Scientific Name" = "The official binomial nomenclature (genus and species) of the plant.",
   "Common Name" = "The widely recognized common or vernacular name of the plant species.",
   "Min Zone" = "The lowest USDA hardiness zone where this plant can survive winter.",
@@ -475,7 +475,7 @@ ui <- fluidPage(
       p("Select your state and desired site and plant characteristics below. Filter columns must match for plants to appear in results. This tool is still under construction. Resulting lists may not be fully correct."),
       div(class = "match-score-explanation",
         p("Sorting columns re-order plants based on a match score without reducing the list, putting ", tags$em("\"best match\""), " species first."),
-        p(tags$strong("Match Score:"), " The match score represents how many of your sorting criteria a given species meets. A higher match score is a better match to your preferences.")
+        p(tags$strong("Match Score:"), " The match score represents the percentage of your sorting criteria a given species meets out of 100%. A higher match score is a better match to your preferences.")
       ),
       p("Looking for sources of native plants? Try searching for vendors through directories ",
         tags$a(href = "https://nativegardendesigns.wildones.org/nursery-list/", "here"), ", ",
@@ -485,10 +485,6 @@ ui <- fluidPage(
         "Or if you're looking specifically for nurseries that sell ", tags$em("only"),
         " native plants sourced from local/regional genotypes, find those ",
         tags$a(href = "https://beechhollowfarms.com/native-plant-nurseries/", "here"), "."
-      ),
-      p(class = "funding-acknowledgement",
-        tags$strong("Funding Acknowledgement:"),
-        " This tool was partially supported by the U.S. Geological Survey's Northeast Climate Adaptation Science Center through grants G23AC00614-00, G22AC00084-02, and G19AC00091 and NSF GRFP No. 1938059."
       )
     ),
     
@@ -560,6 +556,10 @@ ui <- fluidPage(
       p(
         tags$strong("Publication:"),
         " This tool is based on: Fertakos, M.E., T.W.M. Nuhfer, E.M. Beaury, S. Birch, K. Singh, B.A. Bradley, C. Marshner, and J.M. Allen. 2026. The climate smart gardening database: Native and near-native garden plants for the northeastern United States. Ecology."
+      ),
+      p(
+        tags$strong("Funding Acknowledgement:"),
+        " This tool was partially supported by the U.S. Geological Survey's Northeast Climate Adaptation Science Center through grants G23AC00614-00, G22AC00084-02, and G19AC00091 and NSF GRFP No. 1938059."
       )
     )
   )
@@ -894,7 +894,40 @@ server <- function(input, output, session) {
             list(extend = 'excel', text = '<i class="fas fa-download"></i> Excel', 
                  filename = filename_base, className = 'btn-excel'),
             list(extend = 'pdf', text = '<i class="fas fa-download"></i> PDF', 
-                 filename = filename_base, className = 'btn-pdf', orientation = 'landscape')
+                 filename = filename_base,
+                 className = 'btn-pdf',
+                 orientation = 'landscape',
+                 pageSize = 'A3',
+                 exportOptions = list(columns = ':visible'),
+                 customize = JS(
+                   "function(doc) {",
+                   "  doc.pageMargins = [16, 16, 16, 16];",
+                   "  doc.defaultStyle.fontSize = 7;",
+                   "  doc.styles.tableHeader.fontSize = 8;",
+                   "  doc.styles.tableHeader.alignment = 'left';",
+                   "  var tableNode = null;",
+                   "  for (var i = 0; i < doc.content.length; i++) {",
+                   "    if (doc.content[i].table) {",
+                   "      tableNode = doc.content[i];",
+                   "      break;",
+                   "    }",
+                   "  }",
+                   "  if (!tableNode) return;",
+                   "  var colCount = tableNode.table.body[0].length;",
+                   "  tableNode.layout = 'lightHorizontalLines';",
+                   "  tableNode.table.headerRows = 1;",
+                   "  tableNode.table.widths = Array(colCount).fill('*');",
+                   "  tableNode.table.body.forEach(function(row, idx) {",
+                   "    row.forEach(function(cell) {",
+                   "      if (cell && typeof cell === 'object') {",
+                   "        cell.noWrap = false;",
+                   "        cell.margin = [2, 2, 2, 2];",
+                   "        cell.fontSize = idx === 0 ? 8 : 7;",
+                   "      }",
+                   "    });",
+                   "  });",
+                   "}"
+                 ))
           ),
           responsive = FALSE,
           autoWidth = FALSE,
@@ -923,23 +956,21 @@ server <- function(input, output, session) {
             "        $tooltip.css({",
             "          'position': 'fixed',",
             "          'z-index': '9999',",
-            "          'max-width': '300px',",
-            "          'background': '#2c3e50',",
-            "          'color': 'white',",
-            "          'padding': '10px 12px',",
-            "          'border-radius': '4px',",
-            "          'font-size': '12px',",
-            "          'line-height': '1.4',",
-            "          'box-shadow': '0 4px 12px rgba(0, 0, 0, 0.3)',",
             "          'pointer-events': 'none'",
             "        });",
-            "        var offset = $(this).offset();",
+            "        var rect = this.getBoundingClientRect();",
             "        var tooltipWidth = $tooltip.outerWidth();",
-            "        var headerWidth = $(this).outerWidth();",
             "        var tooltipHeight = $tooltip.outerHeight();",
+            "        var left = rect.left + (rect.width / 2) - (tooltipWidth / 2);",
+            "        var top = rect.bottom + 8;",
+            "        var viewportWidth = window.innerWidth;",
+            "        var viewportHeight = window.innerHeight;",
+            "        if (left < 8) left = 8;",
+            "        if ((left + tooltipWidth) > (viewportWidth - 8)) left = viewportWidth - tooltipWidth - 8;",
+            "        if ((top + tooltipHeight) > (viewportHeight - 8)) top = rect.top - tooltipHeight - 8;",
             "        $tooltip.css({",
-            "          'left': (offset.left + headerWidth / 2 - tooltipWidth / 2) + 'px',",
-            "          'top': (offset.top - tooltipHeight - 12) + 'px'",
+            "          'left': left + 'px',",
+            "          'top': top + 'px'",
             "        });",
             "      });",
             "      $(this).on('mouseleave', function() {",
