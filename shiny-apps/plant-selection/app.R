@@ -555,7 +555,7 @@ ui <- fluidPage(
       ),
       p(
         tags$strong("Publication:"),
-        " This tool is based on: Fertakos, M.E., T.W.M. Nuhfer, E.M. Beaury, S. Birch, K. Singh, B.A. Bradley, C. Marshner, and J.M. Allen. 2026. The climate smart gardening database: Native and near-native garden plants for the northeastern United States. Ecology."
+        " This tool is based on: Fertakos, M.E., T.W.M. Nuhfer, E.M. Beaury, S. Birch, K. Singh, B.A. Bradley, C. Marshner, and J.M. Allen. 2026. The climate smart gardening database: Native and near-native garden plants for the northeastern United States. In review."
       ),
       p(
         tags$strong("Funding Acknowledgement:"),
