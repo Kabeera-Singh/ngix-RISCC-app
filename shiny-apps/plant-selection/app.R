@@ -472,7 +472,7 @@ ui <- fluidPage(
   div(class = "main-container",
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
-      p("Select your state and desired site and plant characteristics below. Filter columns must match for plants to appear in results. This tool is still under construction. Resulting lists may not be fully correct."),
+      p("Select your state and desired site and plant characteristics below. Filter columns must match for plants to appear in results. Note that this tool is under continual development and resulting lists may change as a result."),
       div(class = "match-score-explanation",
         p("Sorting columns re-order plants based on a match score without reducing the list, putting ", tags$em("\"best match\""), " species first."),
         p(tags$strong("Match Score:"), " The match score represents the percentage of your sorting criteria a given species meets out of 100%. A higher match score is a better match to your preferences.")
