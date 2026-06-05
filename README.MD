@@ -250,7 +250,7 @@ Build Docker image ──▶ Push to ECR ──▶ Force new ECS deployment
 AWS runs on Linux/AMD64, so even on a Mac with Apple Silicon you need to specify the platform:
 
 ```bash
-docker build --platform linux/amd64 -t csnap-app .
+docker build -t csnap-app .
 ```
 
 ### Step 2: Log in to AWS ECR
