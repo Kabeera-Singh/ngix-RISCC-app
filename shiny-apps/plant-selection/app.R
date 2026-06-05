@@ -462,7 +462,6 @@ ui <- fluidPage(
       href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
       rel = "stylesheet"
     ),
-    # Connection error detection for corporate proxy users
     tags$script(HTML("
       $(document).on('shiny:disconnected', function(event) {
         if (!$('#proxy-error-banner').length) {
@@ -473,6 +472,24 @@ ui <- fluidPage(
             '<strong>Solutions:</strong> Try using a personal network, mobile hotspot, or ask IT to whitelist this domain.' +
             '</div>'
           );
+        }
+      });
+
+      // GA4 custom event handler for Shiny server messages
+      Shiny.addCustomMessageHandler('ga_event', function(data) {
+        if (typeof gtag !== 'undefined') {
+          gtag('event', data.event_name, data.params || {});
+        }
+      });
+
+      // Track DT export button clicks (CSV, Excel, PDF)
+      $(document).on('click', '.dt-button', function() {
+        var btnText = $(this).text().trim().toLowerCase();
+        if (typeof gtag !== 'undefined') {
+          gtag('event', 'export_data', {
+            export_format: btnText,
+            tool: 'plant_selection'
+          });
         }
       });
     "))
@@ -597,6 +614,29 @@ server <- function(input, output, session) {
                      selected = character(0))
     }, error = function(e) message("Error clearing filters: ", e$message))
   })
+
+  # GA4 Analytics Event Tracking ================================================
+  ga_event <- function(event_name, params = list()) {
+    params$tool <- "plant_selection"
+    session$sendCustomMessage("ga_event", list(event_name = event_name, params = params))
+  }
+
+  observeEvent(input$selected_state, {
+    req(input$selected_state)
+    ga_event("select_state", list(state = input$selected_state))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$filter_tree, {
+    ga_event("apply_filter", list(filter_count = length(input$filter_tree)))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$sorting_tree, {
+    ga_event("apply_sort", list(sort_count = length(input$sorting_tree)))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$clear_all_filters, {
+    ga_event("clear_filters")
+  }, ignoreInit = TRUE)
 
   # Helper Functions for Data Processing ======================================
   
@@ -865,10 +905,12 @@ server <- function(input, output, session) {
   
   output$plant_results_count <- renderText({
     results <- filtered_plant_list()
-    if (is.null(results) || nrow(results) == 0) {
+    count <- if (is.null(results)) 0L else nrow(results)
+    ga_event("results_updated", list(count = count, state = input$selected_state))
+    if (count == 0) {
       return("0 plants found")
     }
-    paste(nrow(results), "plants found")
+    paste(count, "plants found")
   })
   
   output$plant_results_table <- DT::renderDataTable({

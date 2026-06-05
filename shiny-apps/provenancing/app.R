@@ -194,7 +194,6 @@ ui <- fluidPage(
       href = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css",
       rel = "stylesheet"
     ),
-    # Connection error detection for corporate proxy users
     tags$script(HTML("
       $(document).on('shiny:disconnected', function(event) {
         if (!$('#proxy-error-banner').length) {
@@ -205,6 +204,24 @@ ui <- fluidPage(
             '<strong>Solutions:</strong> Try using a personal network, mobile hotspot, or ask IT to whitelist this domain.' +
             '</div>'
           );
+        }
+      });
+
+      // GA4 custom event handler for Shiny server messages
+      Shiny.addCustomMessageHandler('ga_event', function(data) {
+        if (typeof gtag !== 'undefined') {
+          gtag('event', data.event_name, data.params || {});
+        }
+      });
+
+      // Track map engagement (first interaction only)
+      var mapEngaged = false;
+      $(document).on('mousedown', '.leaflet-container', function() {
+        if (!mapEngaged) {
+          mapEngaged = true;
+          if (typeof gtag !== 'undefined') {
+            gtag('event', 'map_engaged', { tool: 'provenancing' });
+          }
         }
       });
     "))
@@ -393,6 +410,40 @@ server <- function(input, output, session) {
     updateCheckboxGroupInput(session, "habit", selected = character(0))
   })
   
+  # GA4 Analytics Event Tracking ------------------------------------------------
+  ga_event <- function(event_name, params = list()) {
+    params$tool <- "provenancing"
+    session$sendCustomMessage("ga_event", list(event_name = event_name, params = params))
+  }
+
+  observe({
+    req(input$Long, input$Lat)
+    ga_event("set_location", list(lon = round(input$Long, 1), lat = round(input$Lat, 1)))
+  }) %>% debounce(2000)
+
+  observeEvent(input$scenario, {
+    ga_event("change_scenario", list(scenario = input$scenario))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$filtr, {
+    ga_event("change_climate_filter", list(filter_type = input$filtr))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$habit, {
+    ga_event("toggle_habits", list(habit_count = length(input$habit)))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$clearAllHabits, {
+    ga_event("clear_habits")
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$selected_species, {
+    req(input$selected_species)
+    if (nchar(input$selected_species) > 0) {
+      ga_event("select_species", list(species_name = input$selected_species))
+    }
+  }, ignoreInit = TRUE)
+
   # Reactive Values -----------------------------------------------------------
   
   # Climate value lookup based on user coordinates
@@ -581,6 +632,7 @@ server <- function(input, output, session) {
   output$downloadData <- downloadHandler(
     filename = function() {"plotsinclimate.csv"}, 
     content = function(fname) {
+      ga_event("download_map_data", list(scenario = input$scenario, filter = input$filtr))
       stream_data <- map_data_stream()
       
       if (is.null(stream_data) || stream_data$total_rows == 0) {
@@ -611,6 +663,7 @@ server <- function(input, output, session) {
   output$downloadData1 <- downloadHandler(
     filename = function() {"commonspecies.csv"}, 
     content = function(fname) {
+      ga_event("download_species_summary", list(scenario = input$scenario, filter = input$filtr))
       species_data <- filteredData2()
       write.csv(species_data, fname, row.names = FALSE)
     }

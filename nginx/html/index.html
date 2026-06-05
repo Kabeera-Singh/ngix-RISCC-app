@@ -122,6 +122,17 @@
     loadFragment("header-placeholder", "./partials/header.html");
     loadFragment("footer-placeholder", "./partials/footer.html");
   </script>
+  <script>
+    document.addEventListener('click', function(e) {
+      var link = e.target.closest('a[href^="http"]');
+      if (link && !link.href.includes(window.location.hostname)) {
+        gtag('event', 'outbound_click', {
+          link_url: link.href,
+          link_text: link.textContent.trim().substring(0, 50)
+        });
+      }
+    });
+  </script>
 </body>
 
 </html>
