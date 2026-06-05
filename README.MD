@@ -1,4 +1,4 @@
-# Climate-Smart Native Plants (C-SNaP)
+# Climate-Smart Native Plants Tool (C-SNaP Tool)
 
 Interactive web tools for climate-smart plant selection and seed provenancing across U.S. states.
 
