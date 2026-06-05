@@ -181,6 +181,13 @@ get_species_occurrences_spatial <- function(species_name, bbox = NULL) {
 ui <- fluidPage(
   # Head Section: CSS and External Libraries
   tags$head(
+    tags$script(async = NA, src = "https://www.googletagmanager.com/gtag/js?id=G-1R3RGCQW0P"),
+    tags$script(HTML("
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-1R3RGCQW0P');
+    ")),
     tags$link(rel = "stylesheet", type = "text/css", href = "shared-colors.css"),
     tags$link(rel = "stylesheet", type = "text/css", href = "style.css"),
     tags$link(
