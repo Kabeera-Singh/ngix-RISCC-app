@@ -110,6 +110,15 @@ git clone https://github.com/Kabeera-Singh/ngix-RISCC-app.git
 cd ngix-RISCC-app
 ```
 
+
+### 1.1 Update the respository
+
+If other people have made changes to the repository since you cloned it, pull the latest changes before you start working:
+
+```bash
+git pull
+```
+
 ### 2. Get the data files
 
 **Important:** This repo's `.gitignore` contains `*data*`, which means data files and data directories are excluded from Git. You must obtain them separately.
