@@ -510,19 +510,18 @@ ui <- fluidPage(
   div(class = "main-container",
     div(class = "info-card",
       h5(tags$i(class = "fas fa-info-circle"), " How to Use This Tool"),
-      p("Select your state and desired site and plant characteristics below. Filter columns must match for plants to appear in results. Note that this tool is under continual development and resulting lists may change as a result."),
+      p("Select your state and desired site and plant characteristics below. Filter preferences will subset the returned species list to match the filters. Sorting preferences will re-order the list based on a match score."),
       div(class = "match-score-explanation",
-        p("Sorting columns re-order plants based on a match score without reducing the list, putting ", tags$em("\"best match\""), " species first."),
         p(tags$strong("Match Score:"), " The match score represents the percentage of your sorting criteria a given species meets out of 100%. A higher match score is a better match to your preferences.")
       ),
-      p("Looking for sources of native plants? Try searching for vendors through directories ",
-        tags$a(href = "https://nativegardendesigns.wildones.org/nursery-list/", "here"), ", ",
-        tags$a(href = "https://www.audubon.org/native-plants", "here"), ", ",
-        tags$a(href = "https://homegrownnationalpark.org/directory/", "here"), ", or ",
-        tags$a(href = "https://xerces.org/pollinator-conservation/native-plant-nursery-and-seed-directory", "here"), ". ",
+      p("This tool is intended to help home gardeners and landscape professionals make climate-smart plant choices that support resilient ecosystems. Looking for sources of native plants? Try searching for vendors agregated by ",
+        tags$a(href = "https://nativegardendesigns.wildones.org/nursery-list/", "Wild Ones"), ", ",
+        tags$a(href = "https://www.audubon.org/native-plants", "the Audubon Society"), ", ",
+        tags$a(href = "https://homegrownnationalpark.org/directory/", "Homegrown National Park"), ", or ",
+        tags$a(href = "https://xerces.org/pollinator-conservation/native-plant-nursery-and-seed-directory", "the Xerces Society"), ". ",
         "Or if you're looking specifically for nurseries that sell ", tags$em("only"),
-        " native plants sourced from local/regional genotypes, find those ",
-        tags$a(href = "https://beechhollowfarms.com/native-plant-nurseries/", "here"), "."
+        " native plants sourced from local/regional genotypes, find those aggregated by",
+        tags$a(href = "https://beechhollowfarms.com/native-plant-nurseries/", "Beech Hollow Farms"), "."
       )
     ),
     
