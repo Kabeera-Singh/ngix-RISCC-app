@@ -514,13 +514,13 @@ ui <- fluidPage(
       div(class = "match-score-explanation",
         p(tags$strong("Match Score:"), " The match score represents the percentage of your sorting criteria a given species meets out of 100%. A higher match score is a better match to your preferences.")
       ),
-      p("This tool is intended to help home gardeners and landscape professionals make climate-smart plant choices that support resilient ecosystems. Looking for sources of native plants? Try searching for vendors agregated by ",
+      p("This tool is intended to help home gardeners and landscape professionals make climate-smart plant choices that support resilient ecosystems. Looking for sources of native plants? Try searching for vendors aggregated by ",
         tags$a(href = "https://nativegardendesigns.wildones.org/nursery-list/", "Wild Ones"), ", ",
         tags$a(href = "https://www.audubon.org/native-plants", "the Audubon Society"), ", ",
         tags$a(href = "https://homegrownnationalpark.org/directory/", "Homegrown National Park"), ", or ",
         tags$a(href = "https://xerces.org/pollinator-conservation/native-plant-nursery-and-seed-directory", "the Xerces Society"), ". ",
         "Or if you're looking specifically for nurseries that sell ", tags$em("only"),
-        " native plants sourced from local/regional genotypes, find those aggregated by",
+        " native plants sourced from local/regional genotypes, find those aggregated by ",
         tags$a(href = "https://beechhollowfarms.com/native-plant-nurseries/", "Beech Hollow Farms"), "."
       )
     ),
