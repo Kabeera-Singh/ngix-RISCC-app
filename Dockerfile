@@ -70,11 +70,13 @@ COPY supervisor.conf /etc/supervisor/conf.d/supervisord.conf
 # Copy HTML and CSS
 COPY nginx/html/ /usr/share/nginx/html/
 COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/plant-selection/www/shared-colors.css
-COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
+# Provenancing unpublished 2026-10-13
+# COPY nginx/html/www/css/shared-colors.css /srv/shiny-server/provenancing/www/shared-colors.css
 
 # Copy apps LAST
 COPY shiny-apps/plant-selection/ /srv/shiny-server/plant-selection/
-COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
+# Provenancing unpublished 2026-10-13
+# COPY shiny-apps/provenancing/ /srv/shiny-server/provenancing/
 
 # Set proper permissions
 RUN chown -R shiny:shiny /srv/shiny-server/ && \

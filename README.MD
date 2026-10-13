@@ -9,7 +9,7 @@ Interactive web tools for climate-smart plant selection and seed provenancing ac
 | Component | Description |
 |-----------|-------------|
 | **plant-selection** | Filter and rank native plants by state, hardiness zone, growth habit, and climate resilience |
-| **provenancing** | Find seed sources matched to your site's climate using lookup tables |
+| **provenancing** | Find seed sources matched to your site's climate using lookup tables. **Not currently deployed** (unpublished 2026-10-13; re-enable via the commented lines in `Dockerfile` and `nginx/conf.d/default.conf`) |
 | **Homepage + pages** | Static landing page, contact page, and resources page |
 
 ## How It Works
