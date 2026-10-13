@@ -1,4 +1,4 @@
-FROM rocker/shiny:latest
+FROM rocker/shiny:4.5.3
 
 # Install nginx, supervisor, and additional system dependencies for spatial packages
 RUN apt-get update && apt-get install -y \
@@ -40,23 +40,25 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV GDAL_CONFIG=/usr/bin/gdal-config
 ENV PROJ_LIB=/usr/share/proj
 
+# Packages install from the base image's default repo (Posit Package Manager pre-built
+# Ubuntu binaries), which is far faster than compiling from cran.rstudio.com sources.
 # Install basic CRAN packages first (excluding problematic spatial ones)
-RUN R -e "install.packages(c('shiny', 'tidyverse', 'shinyWidgets', 'DT', 'stringr', 'readxl', 'shinyjs', 'rrapply', 'data.table', 'shinydashboard', 'bslib', 'dplyr', 'ggplot2', 'remotes','DBI','duckdb'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+RUN R -e "install.packages(c('shiny', 'tidyverse', 'shinyWidgets', 'DT', 'stringr', 'readxl', 'shinyjs', 'rrapply', 'data.table', 'shinydashboard', 'bslib', 'dplyr', 'ggplot2', 'remotes','DBI','duckdb'), dependencies=TRUE)"
 
 # Install sf package separately (terra dependency)
-RUN R -e "install.packages('sf', repos='https://cran.rstudio.com/', configure.args='--with-proj-lib=/usr/lib/x86_64-linux-gnu/ --with-proj-include=/usr/include/')"
+RUN R -e "install.packages('sf', configure.args='--with-proj-lib=/usr/lib/x86_64-linux-gnu/ --with-proj-include=/usr/include/')"
 
 # Install terra package with specific configuration
-RUN R -e "install.packages('terra', repos='https://cran.rstudio.com/', type='source')"
+RUN R -e "install.packages('terra')"
 
 # Install geodata package
-RUN R -e "install.packages('geodata', repos='https://cran.rstudio.com/', dependencies=TRUE)"
+RUN R -e "install.packages('geodata', dependencies=TRUE)"
 
 # Install gifski package (requires Rust)
-RUN R -e "install.packages('gifski', repos='https://cran.rstudio.com/')"
+RUN R -e "install.packages('gifski')"
 
 # Install remaining spatial packages
-RUN R -e "install.packages(c('leaflet', 'leafpop'), repos='https://cran.rstudio.com/', dependencies=TRUE)"
+RUN R -e "install.packages(c('leaflet', 'leafpop'), dependencies=TRUE)"
 
 # Install GitHub packages using remotes
 RUN R -e "remotes::install_github('mikejohnson51/AOI')"
